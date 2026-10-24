@@ -1,0 +1,7 @@
+# Python packages RMT needs. Install them with:
+#   pip install -r requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.30
+anthropic>=2.3
+python-dotenv>=1.0
+certifi

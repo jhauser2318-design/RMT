@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RMT · Risky Money Time</title>
+  <meta name="theme-color" content="#04150b">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#markets" aria-label="RMT home">
+      <img src="logo.svg" alt="" class="brand-logo">
+      <span class="brand-text">
+        <span class="brand-name">RMT</span>
+        <span class="brand-tag">Risky Money Time</span>
+      </span>
+    </a>
+    <nav class="modes" role="tablist">
+      <button role="tab" data-mode="markets" class="mode">📈 <span>Trading</span></button>
+      <button role="tab" data-mode="sports" class="mode">🎲 <span>Betting</span></button>
+    </nav>
+    <div class="top-right">
+      <span id="data-badge" class="badge" hidden></span>
+      <button id="chat-open" class="btn-glow">✨ Ask RMT</button>
+    </div>
+  </header>
+
+  <!-- ===================== TRADING ===================== -->
+  <main id="markets" class="mode-page">
+    <section class="ribbons" id="ribbons" aria-label="Stock ribbons">
+      <div class="ribbon skeleton"></div><div class="ribbon skeleton"></div><div class="ribbon skeleton"></div>
+    </section>
+
+    <section class="watch-bar">
+      <form id="watch-form" class="inline-form">
+        <input id="watch-input" placeholder="Add tickers to My Watchlist: e.g. AAPL, TSLA, BTC-USD" autocomplete="off">
+        <button class="btn">Add</button>
+      </form>
+      <div id="watch-chips" class="chips"></div>
+    </section>
+
+    <section class="cols">
+      <article class="panel">
+        <header class="panel-head">
+          <h2>📰 Headlines</h2>
+          <form id="news-form" class="inline-form small">
+            <input id="news-q" placeholder="Ticker or topic" autocomplete="off">
+            <button class="btn">Go</button>
+          </form>
+        </header>
+        <div id="news-filter" class="filter-note" hidden></div>
+        <ul id="news" class="feed"></ul>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>🔥 Trading Talk</h2>
+          <select id="talk-sort" aria-label="Sort posts">
+            <option value="hot">Hot</option><option value="top">Top today</option>
+            <option value="rising">Rising</option><option value="new">New</option>
+          </select>
+        </header>
+        <ul id="talk" class="feed"></ul>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <h2>▶️ YouTube</h2>
+          <form id="yt-form" class="inline-form small">
+            <input id="yt-q" placeholder="Search videos" autocomplete="off">
+            <button class="btn">Go</button>
+          </form>
+        </header>
+        <div id="yt-filter" class="filter-note" hidden></div>
+        <div id="videos" class="videos"></div>
+      </article>
+    </section>
+  </main>
+
+  <!-- ===================== BETTING ===================== -->
+  <main id="sports" class="mode-page" hidden>
+    <section class="ribbons" aria-label="Odds ribbon">
+      <div class="ribbon" id="odds-ribbon"></div>
+    </section>
+
+    <section class="sports-bar">
+      <div id="league-chips" class="chips scroll"></div>
+      <div class="sports-filters">
+        <input type="date" id="game-date" aria-label="Date">
+        <select id="game-state" aria-label="Show">
+          <option value="">All games</option><option value="in">🔴 Live</option>
+          <option value="pre">Upcoming</option><option value="post">Final</option>
+        </select>
+        <input id="game-find" placeholder="Find a team" autocomplete="off">
+        <select id="odds-format" aria-label="Odds format">
+          <option value="american">American</option><option value="decimal">Decimal</option><option value="pct">Win %</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="sports-layout">
+      <div>
+        <div id="games-note" class="filter-note" hidden></div>
+        <div id="games" class="games"></div>
+      </div>
+
+      <aside class="panel stats">
+        <header class="panel-head"><h2>📊 Stats</h2></header>
+        <form id="stat-form" class="inline-form">
+          <input id="stat-q" placeholder="Search a player or team" autocomplete="off">
+          <button class="btn">Search</button>
+        </form>
+        <div id="stat-results" class="stat-results"></div>
+        <button id="stat-ask" class="btn-outline wide" hidden>✨ Ask RMT for stats on this</button>
+
+        <div class="standings-head">
+          <h3>Standings</h3>
+          <select id="standings-league" aria-label="League"></select>
+        </div>
+        <div id="standings" class="standings"></div>
+      </aside>
+    </section>
+  </main>
+
+  <!-- ===================== AI CHAT ===================== -->
+  <aside id="chat" class="chat" aria-label="Ask RMT" hidden>
+    <header class="chat-head">
+      <img src="logo.svg" alt="" class="chat-logo">
+      <div>
+        <strong>Ask RMT</strong>
+        <small>Stocks, odds &amp; sports stats, with live data and web search</small>
+      </div>
+      <button id="chat-clear" class="icon-btn" title="New chat">↺</button>
+      <button id="chat-close" class="icon-btn" title="Close">✕</button>
+    </header>
+    <div id="chat-log" class="chat-log"></div>
+    <div id="chat-suggest" class="chips suggest"></div>
+    <form id="chat-form" class="chat-form">
+      <textarea id="chat-input" rows="2" placeholder="e.g. What are Mahomes' passing stats the last 3 games?"></textarea>
+      <button class="btn-glow" id="chat-send">Send</button>
+    </form>
+  </aside>
+
+  <footer class="foot">
+    RMT is for information and fun, not financial or betting advice. Prices may be delayed. Bet and trade only what you can afford to lose.
+    Gambling problem? Call 1-800-GAMBLER.
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
