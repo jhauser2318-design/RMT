@@ -1,5 +1,5 @@
 """RMT parsers: ESPN games and odds, sportsbook comparison, Yahoo quotes, RSS/Atom feeds,
-the AI chat's tools, and the sample-data fallback. No internet needed: every download is faked.
+the AI chat's tools, the sample-data fallback and the "Update" button. No internet needed: every download is faked.
 
 Run:  python tests/test_parsers.py   (from the RMT folder)
 """
@@ -223,6 +223,44 @@ def test_chat_runs_tools_then_answers():
     assert first["fallbacks"] == "default" and first["model"] == (os.getenv("RMT_MODEL") or "claude-opus-5-5")
     results = second["messages"][-1]["content"]
     assert results[0]["tool_use_id"] == "t1" and "Kansas City Chiefs" in results[0]["content"]
+
+
+def test_update_installs_new_version_and_keeps_keys():
+    import io
+    import tempfile
+    import zipfile
+    import updater
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".env").write_text("ANTHROPIC_API_KEY=sk-ant-mine")
+        (root / "data").mkdir()
+        (root / "data" / "app.log").write_text("old log")
+        (root / "requirements.txt").write_text("fastapi\n")
+        (root / "app.txt").write_text("v1")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:  # GitHub's ZIP: one top-level folder
+            z.writestr("RMT-abc/app.txt", "v2")
+            z.writestr("RMT-abc/new/file.txt", "hi")
+            z.writestr("RMT-abc/.env", "ANTHROPIC_API_KEY=")
+            z.writestr("RMT-abc/data/app.log", "")
+            z.writestr("RMT-abc/requirements.txt", "fastapi\n")
+        commit = {"sha": "a" * 40, "commit": {"message": "Merge pull request #2 from x/desktop\n\nRMT desktop app",
+                                               "committer": {"date": "2026-10-24T00:00:00Z"}}}
+        real = (updater.ROOT, updater.VERSION_FILE, updater._get)
+        updater.ROOT, updater.VERSION_FILE = root, root / "data" / "version.json"
+        updater._get = lambda url, timeout=15: buf.getvalue() if "zipball" in url else json.dumps(commit).encode()
+        try:
+            check = updater.check()
+            assert check["available"] and check["latest"]["summary"] == "RMT desktop app"
+            res = updater.update()
+            assert res == {"updated": True, "error": None, "summary": "RMT desktop app"}
+            assert (root / "app.txt").read_text() == "v2" and (root / "new" / "file.txt").read_text() == "hi"
+            assert (root / ".env").read_text() == "ANTHROPIC_API_KEY=sk-ant-mine"  # keys untouched
+            assert (root / "data" / "app.log").read_text() == "old log"
+            assert not updater.check()["available"]
+            assert updater.update()["summary"] == "You already have the latest version."
+        finally:
+            updater.ROOT, updater.VERSION_FILE, updater._get = real
 
 
 if __name__ == "__main__":

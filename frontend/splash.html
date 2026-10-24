@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RMT · Starting…</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: grid; place-items: center; color: #e6f5ec;
+      background: radial-gradient(800px 500px at 30% 20%, #0e3a22 0%, transparent 60%), #050b08;
+      font: 15px/1.4 system-ui, "Segoe UI", sans-serif;
+    }
+    .box { text-align: center; }
+    img { width: 150px; height: 150px; filter: drop-shadow(0 0 24px rgba(34, 224, 107, .5)); animation: spin 2.4s ease-in-out infinite; }
+    h1 { margin: 16px 0 2px; font-size: 34px; letter-spacing: 4px; background: linear-gradient(90deg, #b8ff5c, #22e06b);
+         -webkit-background-clip: text; background-clip: text; color: transparent; }
+    p { margin: 0; color: #8db39c; letter-spacing: 3px; text-transform: uppercase; font-size: 11px; }
+    small { display: block; margin-top: 22px; color: #5f8570; }
+    @keyframes spin { 50% { transform: scale(1.06) rotate(-4deg); } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <img src="logo.svg" alt="">
+    <h1>RMT</h1>
+    <p>Risky Money Time</p>
+    <small id="msg">Starting…</small>
+  </div>
+  <script>
+    // Opened straight from disk while the server starts; switch over as soon as it answers.
+    const url = "http://localhost:8050/";
+    const started = Date.now();
+    async function check() {
+      try {
+        await fetch(url + "api/app/info", { mode: "no-cors", cache: "no-store" });
+        location.replace(url);
+      } catch {
+        if (Date.now() - started > 45000) document.getElementById("msg").textContent = "Still starting… (the first start after an update can take a minute)";
+        setTimeout(check, 500);
+      }
+    }
+    check();
+  </script>
+</body>
+</html>

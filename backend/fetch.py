@@ -63,6 +63,13 @@ def cached(key: str, ttl: float, fn):
     return value
 
 
+def forget(prefix: str) -> None:
+    """Drop saved results whose key starts with prefix (the Refresh button)."""
+    with _lock:
+        for key in [k for k in _cache if k.startswith(prefix)]:
+            del _cache[key]
+
+
 def _text(el, *names):
     for n in names:
         found = el.find(n)

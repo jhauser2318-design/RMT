@@ -26,13 +26,25 @@ It uses RMT's live prices, headlines, games and odds, and searches the web for s
 
 ---
 
-## Start it
+## Install it (Windows, one time)
 
-**Windows:** double-click **`start.bat`** in the `RMT` folder. The first run takes a minute while it installs what it needs. Your browser then opens **http://localhost:8050**.
+1. Download RMT: **[RMT ZIP](https://github.com/jhauser2318-design/RMT/archive/refs/heads/main.zip)**. Open your **Downloads** folder, right-click the ZIP and choose **Extract All… → Extract**.
+2. Double-click **`INSTALL.bat`** in the extracted folder. It:
+   - installs Python for you if it's missing,
+   - copies RMT to **`C:\Users\<your name>\RMT`**,
+   - asks for your Anthropic API key, or reuses the one from Life Control Center automatically,
+   - puts an **RMT** icon on your Desktop and in the Start menu, then opens RMT.
+3. From then on, just **double-click RMT on your Desktop**. It opens in its own window (no browser tabs). Closing the window closes RMT.
 
-**Mac / Linux:** run `./start.sh`, then open **http://localhost:8050**.
+### Keeping it up to date
+- **Data:** the **⟳** button at the top refreshes everything right now. Next to it, **Auto** sets how often prices, scores and odds update by themselves: off, 15 seconds, 30 seconds, 1 minute or 5 minutes.
+- **New versions of RMT:** a dot on the **⚙** icon means a new version is ready. Click ⚙, then **Update now**. RMT never updates by itself, and your keys are never touched.
 
-The first run creates a file named **`.env`** in the `RMT` folder. Open it in Notepad to add your keys:
+*(Mac / Linux, or to see the server's messages: run `./start.sh` or `start.bat`, then open http://localhost:8050.)*
+
+## Keys
+
+Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in Notepad to add or change them, then close and reopen RMT.
 
 | Key | What it's for | Where to get it |
 |---|---|---|
@@ -40,7 +52,9 @@ The first run creates a file named **`.env`** in the `RMT` folder. Open it in No
 | `ODDS_API_KEY` | Odds from many sportsbooks side by side. Optional. | https://the-odds-api.com (free: 500 requests a month) |
 | `YOUTUBE_API_KEY` | Search all of YouTube by ticker or topic. Optional. | Google Cloud Console → enable **YouTube Data API v3** → Credentials |
 
-Save the file, then close and reopen RMT.
+| `GITHUB_TOKEN` | Only if the RMT repository on GitHub is **private**: lets the Update button download new versions. | github.com → Settings → Developer settings → Fine-grained token with read access to RMT |
+
+Want **truly live** stock prices, crypto and odds for free? See the plan in [docs/LIVE_DATA_PLAN.md](docs/LIVE_DATA_PLAN.md).
 
 ## Good to know
 - **Where the data comes from:** RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
