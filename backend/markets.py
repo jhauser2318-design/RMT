@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import demo
 from .fetch import cached, demo_mode, get_json
+from .stream import crypto
 
 RIBBONS = [
     {"id": "indexes", "name": "Indexes & Futures", "symbols": [
@@ -65,10 +66,13 @@ def quotes(symbols: list[str]) -> tuple[list[dict], bool]:
     """Quotes for the symbols, and whether they are live (False = sample data)."""
     symbols = [s.strip().upper() for s in symbols if s.strip()][:80]
     if not demo_mode():
+        crypto.want(symbols)  # coins (…-USD) get live streamed prices on top
         with ThreadPoolExecutor(max_workers=12) as pool:
             got = [q for q in pool.map(_quote, symbols) if q]
         if got:
-            return got, True
+            return [crypto.overlay(q) for q in got], True
+        # Yahoo is down: sample prices, except coins whose live stream is working.
+        return [crypto.overlay(demo.quote(s)) for s in symbols], False
     return [demo.quote(s) for s in symbols], False
 
 

@@ -105,6 +105,8 @@ def chat(history: list[dict]) -> dict:
             tools=[*TOOLS, WEB_SEARCH],
             thinking={"type": "adaptive"},
             output_config={"effort": "medium"},
+            # Each round of tool use re-sends the conversation; caching bills the repeated part at ~10%.
+            cache_control={"type": "ephemeral"},
             # If a safety check declines (e.g. a false positive), the API retries on another model.
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",

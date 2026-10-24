@@ -63,6 +63,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .settings h3 { margin: 0 0 4px; }
 .muted { color: var(--muted); margin: 6px 0; }
 .small { font-size: 12px; }
+.sources-head { margin-top: 14px !important; font-size: 13px; color: var(--green); }
+.sources { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.source { display: flex; flex-direction: column; gap: 1px; }
+.source .muted { margin: 0; }
 .update-new { border: 1px solid var(--green); border-radius: 10px; padding: 10px; margin: 8px 0; background: rgba(34, 224, 107, .08); }
 .update-new p { margin: 0 0 8px; }
 .badge { font-size: 11px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
@@ -115,6 +119,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .down { color: var(--down); }
 .flat { color: var(--muted); }
 .spark { width: 54px; height: 20px; }
+.tick.flash-up { animation: flashUp 0.9s ease-out; }
+.tick.flash-down { animation: flashDown 0.9s ease-out; }
+@keyframes flashUp { from { background: rgba(43, 242, 127, .32); } to { background: transparent; } }
+@keyframes flashDown { from { background: rgba(255, 77, 106, .32); } to { background: transparent; } }
+.ribbon.streaming .ribbon-label::after {
+  content: "⚡ LIVE"; margin-left: 8px; padding: 1px 6px; border-radius: 6px; font-size: 9.5px;
+  background: #03140a; color: var(--lime); animation: blink 1.6s infinite;
+}
 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 @keyframes pulse { 50% { opacity: .5; } }
 @keyframes blink { 50% { opacity: .3; } }

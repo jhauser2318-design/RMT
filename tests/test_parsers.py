@@ -220,6 +220,7 @@ def test_chat_runs_tools_then_answers():
     assert res["sources"] == [{"url": "https://espn.com/injuries", "title": "NFL injuries"}]
     first, second = calls
     assert first["messages"][0]["role"] == "user"  # a leading assistant turn is dropped
+    assert first["cache_control"] == {"type": "ephemeral"}
     assert first["fallbacks"] == "default" and first["model"] == (os.getenv("RMT_MODEL") or "claude-opus-5-5")
     results = second["messages"][-1]["content"]
     assert results[0]["tool_use_id"] == "t1" and "Kansas City Chiefs" in results[0]["content"]

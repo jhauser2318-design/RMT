@@ -7,6 +7,7 @@ One app with two sides, **📈 Trading** and **🎲 Betting**, plus an AI chat t
 It runs on your own computer and opens in your web browser, the same way Life Control Center does.
 
 ### 📈 Trading
+- **Live crypto**: Bitcoin, Ethereum, Solana and more stream live from Coinbase (no key needed). The Crypto ribbon shows **⚡ LIVE** and each price flashes green or red as it ticks.
 - **Stock ribbons**: scrolling tickers for Indexes & Futures, Mega Caps, Day-Trader Favorites, ETFs, Crypto, and Commodities & FX. Each one shows the price, the % change and a mini chart. Hover over a ribbon to pause it.
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.
@@ -57,7 +58,8 @@ Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in 
 Want **truly live** stock prices, crypto and odds for free? See the plan in [docs/LIVE_DATA_PLAN.md](docs/LIVE_DATA_PLAN.md).
 
 ## Good to know
-- **Where the data comes from:** RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
+- **Costs:** everything in RMT is free except the AI chat, which costs a few cents per question. See [docs/LIVE_DATA_PLAN.md](docs/LIVE_DATA_PLAN.md#what-it-costs).
+- **Where the data comes from:** crypto streams live from Coinbase. Otherwise RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
 - **"Sample data" badge:** if RMT can't reach a source (no internet, or a site is down), it shows made-up sample numbers and the badge in the top-right corner says **Sample data** instead of **LIVE**. Never bet or trade on sample numbers.
 - Prices can be delayed up to ~15 minutes. Without `ODDS_API_KEY` you get one sportsbook's line per game (usually ESPN BET or DraftKings).
 - To follow different YouTube channels, edit the `YOUTUBE_CHANNELS` list in `backend/news.py`. The tickers on the ribbons are in `backend/markets.py`.

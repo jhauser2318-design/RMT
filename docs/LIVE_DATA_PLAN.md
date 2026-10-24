@@ -28,8 +28,8 @@ _Written October 2026. Free plans change often, so check each provider's pricing
    - Sign up: finnhub.io → Get free API key.
 3. **Yahoo Finance (what RMT uses today)**: kept for indexes, futures, FX and as a backup. No key, delayed up to ~15 minutes for some markets.
 
-### 🪙 Crypto
-- **Coinbase public stream**: every BTC, ETH, SOL… trade, in real time, free, no account or key. RMT can switch the Crypto ribbon to this right away.
+### 🪙 Crypto ✅ built
+- **Coinbase public stream**: every BTC, ETH, SOL… trade, in real time, free, no account or key. The Crypto ribbon shows **⚡ LIVE** while it's streaming, and coins in your watchlist (anything ending in `-USD`, like `PEPE-USD`) stream too.
 
 ### 🏈 Scores and stats
 - **ESPN** (what RMT uses today): all 12 leagues. Poll every **15 seconds for live games** and every few minutes otherwise.
@@ -67,6 +67,43 @@ If free isn't enough, these are the first upgrades worth considering (reported p
 - **The Odds API, 20,000 credits for ~$30/month**: line shopping across every game, refreshed often.
 - **Alpaca's paid data plan**: full-market (SIP) real-time stocks with no 30-symbol limit.
 
+## What it costs
+
+**Short version: everything RMT needs can run for $0 a month.** The only thing that costs money by default is the AI chat, and only when you use it.
+
+### Free forever (no card needed)
+| Service | What RMT gets | Free limit |
+|---|---|---|
+| Coinbase stream | Live crypto | Unlimited, no key |
+| Yahoo Finance, ESPN, RSS news, Reddit, NHL/MLB feeds | Prices (delayed), scores, odds line, news | No key; just be polite with refresh rates |
+| Alpaca | Real-time stocks (IEX) | 30 streamed symbols, 200 requests/min |
+| Finnhub | Quotes, company news | ~60 requests/min (reported) |
+| The Odds API | Many sportsbooks side by side | 500 credits/month (~165 lookups) |
+| Odds-API.io | More odds lookups | Reported ~100 requests/hour |
+| YouTube Data API | Video search | 10,000 units/day (a search costs 100, so ~100 searches/day) |
+
+### If you ever want to pay for more (reported prices, monthly; check each site first)
+| Upgrade | Price | Worth it? |
+|---|---|---|
+| **The Odds API**: 20,000 credits | **~$30** | ✅ Best value if you bet a lot. Line shopping across every game, refreshed every few minutes. |
+| **BALLDONTLIE ALL-STAR** (NBA box scores, injuries) | **~$10** | 👍 Cheap if you want deep NBA stats in the app. The AI chat can already look most of this up. |
+| **Massive (formerly Polygon) Starter** | ~$29 | ❌ Still 15-minute delayed. Not worth it over free Alpaca. |
+| **Finnhub Basic** | ~$50 | ❌ Not needed; the free plan covers what RMT uses. |
+| **Alpaca Algo Trader Plus** (whole-market real-time stocks, options) | **~$99** | Only if you're actively day trading and need every exchange's trades. |
+| **Massive Advanced** (real-time stocks) | ~$199 | ❌ Alpaca does this for half the price. |
+| **BALLDONTLIE GOAT / ALL-ACCESS** | ~$40 / ~$160–300 | ❌ Overkill for personal use. |
+
+### The AI chat (Claude), pay as you go
+You only pay when you ask a question. Rough cost per question (a typical question looks up 1–3 things and may search the web):
+
+| Model (set `RMT_MODEL` in `.env`) | Per question | 20 questions a day for a month |
+|---|---|---|
+| **Claude Opus 5.5** (default, smartest) | ~10–30¢ | ~$60–180 |
+| **Claude Sonnet 5.5** (`claude-sonnet-5-5`) | ~5–15¢ | ~$30–90 |
+| **Claude Haiku 5.5** (`claude-haiku-5-5`) | ~1–2¢ | ~$6–12 |
+
+Web searches inside an answer add about 1¢ each. RMT turns on "prompt caching", which bills the repeated part of each round at about 10%, so real costs should land toward the low end. You can set a monthly spending limit at console.anthropic.com → Billing.
+
 ## What you need to do
 
 1. Make free accounts and copy the keys:
@@ -76,6 +113,6 @@ If free isn't enough, these are the first upgrades worth considering (reported p
    - *(Optional)* **Odds-API.io**: odds-api.io → free plan.
    - *(Optional)* **YouTube Data API**: Google Cloud Console → enable *YouTube Data API v3* → *Credentials* → API key.
 2. Paste them into RMT's `.env` file (or the Data sources panel once Step 1 is built).
-3. Tell me which step to build first. Step 1 + the Coinbase crypto stream is a good first piece, since crypto needs no keys at all.
+3. Tell me which step to build next. With the crypto stream done, Alpaca (real-time stocks) is the biggest upgrade.
 
 Sources used for this plan: Alpaca's market-data docs, and third-party comparisons of Finnhub, The Odds API, Odds-API.io, BALLDONTLIE and the NHL/MLB feeds. All listed in the chat where this plan was written.

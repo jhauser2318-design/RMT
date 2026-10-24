@@ -1,4 +1,6 @@
 """RMT web server. The desktop icon starts it (launcher.pyw); start.bat / start.sh work too."""
+import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -7,15 +9,15 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, fetch, markets, news, sports  # noqa: E402 (after .env is loaded)
+from . import ai, fetch, markets, news, sports, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -38,6 +40,37 @@ def _watch_idle():
 
 if os.getenv("RMT_DESKTOP") == "1":
     threading.Thread(target=_watch_idle, daemon=True).start()
+
+
+@app.on_event("startup")
+async def start_streams():
+    if not fetch.demo_mode():
+        stream.crypto.start()
+
+
+@app.get("/api/stream/status")
+def stream_status():
+    return {"crypto": stream.crypto.info()}
+
+
+@app.get("/api/stream/crypto")
+async def crypto_stream(request: Request):
+    """Server-sent events: every new crypto price, pushed to the window as it happens."""
+    async def events():
+        q = stream.crypto.listen()
+        try:
+            yield f"data: {json.dumps({'type': 'status', **stream.crypto.info()})}\n\n"
+            yield f"data: {json.dumps({'type': 'prices', 'items': stream.crypto.snapshot()})}\n\n"
+            while not await request.is_disconnected():
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": still here\n\n"  # keeps the connection open
+        finally:
+            stream.crypto.unlisten(q)
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/app/info")

@@ -57,8 +57,8 @@ function badge(live) {
 }
 
 // A ribbon scrolls forever: the items are drawn twice and the track slides by half.
-function ribbonHTML(label, inner, count) {
-  return `<div class="ribbon"><div class="ribbon-label">${esc(label)}</div>
+function ribbonHTML(label, inner, count, id = "") {
+  return `<div class="ribbon" data-id="${esc(id)}"><div class="ribbon-label">${esc(label)}</div>
     <div class="ribbon-track" style="--dur:${Math.max(25, count * 4.5)}s">${inner}${inner}</div></div>`;
 }
 
@@ -86,7 +86,8 @@ async function loadRibbons() {
     }
     $("#ribbons").dataset.layout = layout;
     $("#ribbons").innerHTML = groups.map((r) => ribbonHTML(r.name, r.items.map((q) => `
-      <span class="tick" data-sym="${esc(q.symbol)}" title="${esc(q.name)}: click for news &amp; videos">${tick(q)}</span>`).join(""), r.items.length)).join("");
+      <span class="tick" data-sym="${esc(q.symbol)}" title="${esc(q.name)}: click for news &amp; videos">${tick(q)}</span>`).join(""), r.items.length, r.id)).join("");
+    showStreamStatus();
   } catch (e) {
     $("#ribbons").innerHTML = `<div class="empty">Couldn't load prices: ${esc(e.message)}</div>`;
   }
@@ -493,6 +494,60 @@ $("#odds-format").value = store.get("oddsFormat", "american");
 window.addEventListener("hashchange", showMode);
 showMode();
 
+/* ===================== LIVE CRYPTO STREAM ===================== */
+
+// The server keeps a live connection to Coinbase and pushes each new price here.
+let streamInfo = { status: "off" };
+const lastPx = {};
+
+function applyLive(items) {
+  for (const p of items) {
+    const els = $$(`#ribbons .tick[data-sym="${CSS.escape(p.symbol)}"]`);
+    const prev = lastPx[p.symbol];
+    lastPx[p.symbol] = p.price;
+    for (const el of els) {
+      const px = el.querySelector(".tick-px");
+      const ch = el.querySelector(".tick-ch");
+      if (!px || !ch) continue;
+      px.textContent = fmtPrice(p.price);
+      ch.className = `tick-ch ${dir(p.pct)}`;
+      ch.textContent = fmtPct(p.pct);
+      if (prev != null && prev !== p.price) {
+        el.classList.remove("flash-up", "flash-down");
+        void el.offsetWidth;  // restart the flash animation
+        el.classList.add(p.price > prev ? "flash-up" : "flash-down");
+      }
+    }
+  }
+}
+
+function showStreamStatus() {
+  const live = streamInfo.status === "live";
+  $$('.ribbon[data-id="crypto"]').forEach((r) => {
+    r.classList.toggle("streaming", live);
+    r.title = live ? `Live prices from ${streamInfo.source} (24-hour change)` : "";
+  });
+  const text = {
+    live: `⚡ Live, streaming from ${streamInfo.source}`,
+    connecting: `Connecting to ${streamInfo.source}…`,
+    offline: `Can't reach Coinbase right now${streamInfo.error ? ` (${streamInfo.error})` : ""}. Showing regular prices; retrying.`,
+    off: "Off (sample-data mode)",
+  }[streamInfo.status] || streamInfo.status;
+  $("#sources").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${live ? "up" : "muted"}">${esc(text)}</span></div>
+    <div class="source"><span>📈 Stocks</span><span class="muted">Yahoo Finance, refreshed (up to ~15 min delayed)</span></div>
+    <div class="source"><span>🏈 Scores &amp; odds</span><span class="muted">ESPN${gamesData.multi_book ? " + The Odds API" : ""}, refreshed</span></div>`;
+}
+
+function startStream() {
+  if (!window.EventSource) return;
+  const es = new EventSource("/api/stream/crypto");  // reconnects by itself if the server restarts
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === "prices") applyLive(d.items);
+    else if (d.type === "status") { streamInfo = d; showStreamStatus(); }
+  };
+}
+
 /* ===================== REFRESH & UPDATES ===================== */
 
 function stamp() {
@@ -584,6 +639,8 @@ document.addEventListener("click", (e) => {
   if (e.target.id === "update-now") installUpdate();
   else if (!$("#settings").hidden && !e.target.closest("#settings, #settings-open")) $("#settings").hidden = true;
 });
+
+startStream();
 
 // Tell the server this window is still open (it stops itself a few minutes after the window closes).
 const ping = () => fetch("/api/app/ping", { method: "POST" }).catch(() => {});
