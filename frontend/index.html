@@ -37,7 +37,18 @@
       <h3>RMT</h3>
       <p class="muted" id="version-line">Version: checking…</p>
       <h3 class="sources-head">Live data</h3>
-      <div id="sources" class="sources"></div>
+      <div id="sources" class="sources">
+        <div id="sources-status"></div>
+        <button id="alpaca-change" class="link-btn" type="button" hidden>Change Alpaca keys</button>
+        <form id="alpaca-form" class="alpaca-form" autocomplete="off">
+          <b>Real-time stocks with Alpaca (free)</b>
+          <input id="alpaca-key" placeholder="API Key ID (starts with PK…)" spellcheck="false">
+          <input id="alpaca-secret" type="password" placeholder="Secret Key" spellcheck="false">
+          <button id="alpaca-save" class="btn-glow">Save &amp; test</button>
+          <span class="small muted">Get them at alpaca.markets → Paper account → API Keys → Generate. They're saved only on this computer.</span>
+        </form>
+        <span id="alpaca-msg" class="small muted"></span>
+      </div>
       <h3 class="sources-head">Updates</h3>
       <div id="update-box"></div>
       <button id="update-check" class="btn">Check for updates</button>

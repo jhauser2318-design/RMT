@@ -8,6 +8,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 
 ### 📈 Trading
 - **Live crypto**: Bitcoin, Ethereum, Solana and more stream live from Coinbase (no key needed). The Crypto ribbon shows **⚡ LIVE** and each price flashes green or red as it ticks.
+- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, QQQ and the hottest names (30 in all) stream live, marked ⚡.
 - **Stock ribbons**: scrolling tickers for Indexes & Futures, Mega Caps, Day-Trader Favorites, ETFs, Crypto, and Commodities & FX. Each one shows the price, the % change and a mini chart. Hover over a ribbon to pause it.
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.
@@ -50,6 +51,7 @@ Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in 
 | Key | What it's for | Where to get it |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | The **Ask RMT** chat. Required for the chat; everything else works without it. | https://console.anthropic.com → API Keys (you can reuse your Life Control Center key) |
+| `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` | Real-time stock prices. Optional. Easiest: paste them under ⚙ → Live data. | https://alpaca.markets → sign up → Paper account → API Keys → Generate (free) |
 | `ODDS_API_KEY` | Odds from many sportsbooks side by side. Optional. | https://the-odds-api.com (free: 500 requests a month) |
 | `YOUTUBE_API_KEY` | Search all of YouTube by ticker or topic. Optional. | Google Cloud Console → enable **YouTube Data API v3** → Credentials |
 

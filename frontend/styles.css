@@ -59,12 +59,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #auto-refresh { padding: 5px 8px; font-size: 12.5px; }
 .spinning { animation: spin360 .8s linear infinite; }
 @keyframes spin360 { to { transform: rotate(360deg); } }
-.settings { position: absolute; top: 64px; right: 20px; width: 320px; z-index: 30; background: #0d1c14; }
+.settings { position: absolute; top: 64px; right: 20px; width: 320px; z-index: 30; }
+.settings.panel { background: #0d1c14; }
 .settings h3 { margin: 0 0 4px; }
 .muted { color: var(--muted); margin: 6px 0; }
 .small { font-size: 12px; }
 .sources-head { margin-top: 14px !important; font-size: 13px; color: var(--green); }
 .sources { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+#sources-status { display: flex; flex-direction: column; gap: 6px; }
+.alpaca-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); }
+.alpaca-form .down, .alpaca-form .up { margin: 0; }
+.link-btn { background: none; border: 0; color: var(--green); cursor: pointer; padding: 0; text-align: left; font-size: 12.5px; }
+.bolt { font-size: 11px; margin-right: -4px; }
+.settings { max-height: calc(100vh - 80px); overflow-y: auto; }
 .source { display: flex; flex-direction: column; gap: 1px; }
 .source .muted { margin: 0; }
 .update-new { border: 1px solid var(--green); border-radius: 10px; padding: 10px; margin: 8px 0; background: rgba(34, 224, 107, .08); }

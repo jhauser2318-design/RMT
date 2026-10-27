@@ -18,7 +18,7 @@ _Written October 2026. Free plans change often, so check each provider's pricing
 ## Recommended free setup
 
 ### 📈 Stocks
-1. **Alpaca (free plan)**: the main real-time source.
+1. **Alpaca (free plan)** ✅ built: the main real-time source. Paste your keys in RMT under ⚙ → Live data.
    - Real-time US stocks from the IEX exchange, **streamed** (prices arrive the moment they trade, no polling).
    - Free limits (from Alpaca's docs): **30 symbols** streamed at once, **200 requests/minute**.
    - RMT would stream your **watchlist plus the Day-Trader Favorites** live, and fill in everything else with requests every few seconds.
@@ -113,6 +113,6 @@ Web searches inside an answer add about 1¢ each. RMT turns on "prompt caching",
    - *(Optional)* **Odds-API.io**: odds-api.io → free plan.
    - *(Optional)* **YouTube Data API**: Google Cloud Console → enable *YouTube Data API v3* → *Credentials* → API key.
 2. Paste them into RMT's `.env` file (or the Data sources panel once Step 1 is built).
-3. Tell me which step to build next. With the crypto stream done, Alpaca (real-time stocks) is the biggest upgrade.
+3. Tell me which step to build next. Crypto and Alpaca are done; next up are live game scores every 15 seconds and The Odds API credit tracker.
 
 Sources used for this plan: Alpaca's market-data docs, and third-party comparisons of Finnhub, The Odds API, Odds-API.io, BALLDONTLIE and the NHL/MLB feeds. All listed in the chat where this plan was written.

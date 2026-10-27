@@ -9,10 +9,11 @@ const store = {
   set(k, v) { try { localStorage.setItem(`rmt.${k}`, JSON.stringify(v)); } catch { /* private mode */ } },
 };
 
-async function api(path, body) {
-  const res = await fetch(`/api${path}`, body ? {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  } : {});
+async function api(path, body, method = body ? "POST" : "GET") {
+  // X-RMT marks requests from RMT's own window; the server refuses changes without it.
+  const res = await fetch(`/api${path}`, method === "GET" ? {} : {
+    method, headers: { "Content-Type": "application/json", "X-RMT": "1" }, body: body ? JSON.stringify(body) : undefined,
+  });
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
   if (!res.ok) throw new Error(data?.detail || `Request failed (${res.status})`);
@@ -73,7 +74,7 @@ async function loadRibbons() {
     badge(data.live);
     stamp();
     const groups = data.ribbons.filter((r) => r.items.length);
-    const tick = (q) => `<span class="tick-sym">${esc(q.label)}</span>
+    const tick = (q) => `${q.streaming ? `<span class="bolt" title="Live">⚡</span>` : ""}<span class="tick-sym">${esc(q.label)}</span>
         <span class="tick-px">${fmtPrice(q.price)}</span>
         <span class="tick-ch ${dir(q.pct)}">${fmtPct(q.pct)}</span>
         ${spark(q.spark, q.pct >= 0)}`;
@@ -494,10 +495,11 @@ $("#odds-format").value = store.get("oddsFormat", "american");
 window.addEventListener("hashchange", showMode);
 showMode();
 
-/* ===================== LIVE CRYPTO STREAM ===================== */
+/* ===================== LIVE PRICES ===================== */
 
-// The server keeps a live connection to Coinbase and pushes each new price here.
-let streamInfo = { status: "off" };
+// The server keeps live connections to Coinbase (crypto) and Alpaca (stocks)
+// and pushes each new price here.
+const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" } };
 const lastPx = {};
 
 function applyLive(items) {
@@ -509,6 +511,7 @@ function applyLive(items) {
       const px = el.querySelector(".tick-px");
       const ch = el.querySelector(".tick-ch");
       if (!px || !ch) continue;
+      if (!el.querySelector(".bolt")) el.insertAdjacentHTML("afterbegin", `<span class="bolt" title="Live">⚡</span>`);
       px.textContent = fmtPrice(p.price);
       ch.className = `tick-ch ${dir(p.pct)}`;
       ch.textContent = fmtPct(p.pct);
@@ -522,29 +525,64 @@ function applyLive(items) {
 }
 
 function showStreamStatus() {
-  const live = streamInfo.status === "live";
+  const c = streamInfo.crypto, k = streamInfo.stocks;
+  const cryptoLive = c.status === "live";
   $$('.ribbon[data-id="crypto"]').forEach((r) => {
-    r.classList.toggle("streaming", live);
-    r.title = live ? `Live prices from ${streamInfo.source} (24-hour change)` : "";
+    r.classList.toggle("streaming", cryptoLive);
+    r.title = cryptoLive ? `Live prices from ${c.source} (24-hour change)` : "";
   });
-  const text = {
-    live: `⚡ Live, streaming from ${streamInfo.source}`,
-    connecting: `Connecting to ${streamInfo.source}…`,
-    offline: `Can't reach Coinbase right now${streamInfo.error ? ` (${streamInfo.error})` : ""}. Showing regular prices; retrying.`,
+  const cryptoText = {
+    live: `⚡ Live, streaming from ${c.source}`,
+    connecting: `Connecting to ${c.source}…`,
+    offline: `Can't reach Coinbase right now${c.error ? ` (${c.error})` : ""}. Showing regular prices; retrying.`,
     off: "Off (sample-data mode)",
-  }[streamInfo.status] || streamInfo.status;
-  $("#sources").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${live ? "up" : "muted"}">${esc(text)}</span></div>
-    <div class="source"><span>📈 Stocks</span><span class="muted">Yahoo Finance, refreshed (up to ~15 min delayed)</span></div>
+  }[c.status] || c.status;
+  const market = k.market_open === false ? " · market closed, prices move again at the next open" : "";
+  const stockText = {
+    live: `⚡ Live from Alpaca: ${k.streaming} stocks streaming, the rest real-time on each refresh${market}`,
+    connecting: "Connecting to Alpaca…",
+    offline: `Alpaca: ${k.error || "disconnected"}. Retrying.`,
+    error: k.error,
+    off: "Yahoo Finance (up to ~15 min delayed). Add free Alpaca keys below for real-time prices.",
+  }[k.status] || k.status;
+  $("#sources-status").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${cryptoLive ? "up" : "muted"}">${esc(cryptoText)}</span></div>
+    <div class="source"><span>📈 Stocks</span><span class="${k.status === "live" ? "up" : k.status === "error" ? "down" : "muted"}">${esc(stockText)}</span></div>
     <div class="source"><span>🏈 Scores &amp; odds</span><span class="muted">ESPN${gamesData.multi_book ? " + The Odds API" : ""}, refreshed</span></div>`;
+  const hasKeys = k.configured && k.status !== "error";
+  $("#alpaca-form").hidden = hasKeys && !alpacaEditing;
+  $("#alpaca-change").hidden = !hasKeys || alpacaEditing;
 }
+
+let alpacaEditing = false;
+$("#alpaca-change").addEventListener("click", () => { alpacaEditing = true; showStreamStatus(); $("#alpaca-key").focus(); });
+$("#alpaca-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#alpaca-msg");
+  const btn = $("#alpaca-save");
+  btn.disabled = true;
+  msg.className = "small muted";
+  msg.textContent = "Checking the keys with Alpaca…";
+  try {
+    const res = await api("/settings/alpaca", { key_id: $("#alpaca-key").value, secret: $("#alpaca-secret").value });
+    msg.className = "small up";
+    msg.textContent = `${res.message} Saved. Live stock prices start in a few seconds.`;
+    $("#alpaca-secret").value = "";
+    alpacaEditing = false;
+    setTimeout(loadRibbons, 3000);
+  } catch (err) {
+    msg.className = "small down";
+    msg.textContent = err.message;
+  }
+  btn.disabled = false;
+});
 
 function startStream() {
   if (!window.EventSource) return;
-  const es = new EventSource("/api/stream/crypto");  // reconnects by itself if the server restarts
+  const es = new EventSource("/api/stream/live");  // reconnects by itself if the server restarts
   es.onmessage = (e) => {
     const d = JSON.parse(e.data);
     if (d.type === "prices") applyLive(d.items);
-    else if (d.type === "status") { streamInfo = d; showStreamStatus(); }
+    else if (d.type === "status") { streamInfo[d.stream] = d; showStreamStatus(); }
   };
 }
 
@@ -643,7 +681,7 @@ document.addEventListener("click", (e) => {
 startStream();
 
 // Tell the server this window is still open (it stops itself a few minutes after the window closes).
-const ping = () => fetch("/api/app/ping", { method: "POST" }).catch(() => {});
+const ping = () => fetch("/api/app/ping", { method: "POST", headers: { "X-RMT": "1" } }).catch(() => {});
 ping();
 setInterval(ping, 15000);
 setTimeout(() => checkUpdate(true), 4000);  // just lights the ⚙ dot; never installs by itself

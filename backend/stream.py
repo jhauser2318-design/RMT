@@ -1,4 +1,7 @@
-"""Live crypto prices, streamed from Coinbase the moment each trade happens.
+"""Live prices pushed to the window: crypto from Coinbase (this file) and
+stocks from Alpaca (alpaca.py, which builds on LiveStream below).
+
+Crypto prices are streamed from Coinbase the moment each trade happens.
 
 Coinbase's public market feed needs no account or key. RMT keeps one
 connection open while it runs, and pushes the newest prices to the open
@@ -93,12 +96,14 @@ class AdvancedTradeFeed(Feed):
         return out, None
 
 
-class CryptoStream:
-    def __init__(self, feeds=None):
-        self.feeds = feeds or [ExchangeFeed(), AdvancedTradeFeed()]
+class LiveStream:
+    """Prices pushed from a live connection: keeps the newest price per symbol,
+    and hands batches of changes to every open window a few times a second."""
+    kind = ""  # "crypto" or "stocks": tells the window which stream an event is from
+
+    def __init__(self):
         self.prices: dict[str, dict] = {}
-        self.wanted: list[str] = list(BASE)
-        self.status = "off"         # off → connecting → live (or offline)
+        self.status = "off"         # off → connecting → live (or offline / error)
         self.source = ""
         self.error = ""
         self.since = 0.0
@@ -106,8 +111,6 @@ class CryptoStream:
         self._dirty: set[str] = set()
         self._listeners: set[asyncio.Queue] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._ws = None
-        self._feed: Feed | None = None
         self._tasks: list[asyncio.Task] = []
 
     # ---------- used by the rest of RMT (any thread) ----------
@@ -115,7 +118,10 @@ class CryptoStream:
     def latest(self, symbol: str) -> dict | None:
         with self._lock:
             p = self.prices.get(symbol)
-        return p if p and time.time() - p["time"] < FRESH else None
+        return p if p and time.time() - p["time"] < self.fresh_for(symbol) else None
+
+    def fresh_for(self, symbol: str) -> float:
+        return FRESH
 
     def overlay(self, quote: dict) -> dict:
         """A quote with the streamed price in place of the regular (delayed) one, when there is one."""
@@ -124,23 +130,14 @@ class CryptoStream:
             return quote
         return {**quote, "price": p["price"], "change": p["change"], "pct": p["pct"], "streaming": True}
 
-    def want(self, symbols) -> None:
-        """Also stream these coins (e.g. from the watchlist). Non-crypto symbols are ignored."""
-        new = [s for s in (x.upper() for x in symbols) if s.endswith("-USD") and s not in self.wanted]
-        if not new:
-            return
-        self.wanted += new
-        if self._loop and self._ws:
-            self._loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._subscribe(new)))
-
     def info(self) -> dict:
-        return {"status": self.status, "source": self.source, "error": self.error,
+        return {"stream": self.kind, "status": self.status, "source": self.source, "error": self.error,
                 "since": self.since, "symbols": len(self.prices)}
 
     # ---------- the window's live connection ----------
 
-    def listen(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue(maxsize=50)
+    def listen(self, q: asyncio.Queue | None = None) -> asyncio.Queue:
+        q = q or asyncio.Queue(maxsize=100)
         self._listeners.add(q)
         return q
 
@@ -149,9 +146,10 @@ class CryptoStream:
 
     def snapshot(self) -> list[dict]:
         with self._lock:
-            return [p for p in self.prices.values() if time.time() - p["time"] < FRESH]
+            return [p for s, p in self.prices.items() if time.time() - p["time"] < self.fresh_for(s)]
 
     def _broadcast(self, event: dict) -> None:
+        event = {**event, "stream": self.kind}
         for q in list(self._listeners):
             try:
                 q.put_nowait(event)
@@ -162,7 +160,7 @@ class CryptoStream:
         self.status, self.source, self.error, self.since = status, source, error, time.time()
         self._broadcast({"type": "status", **self.info()})
 
-    # ---------- the Coinbase connection (runs on the server's event loop) ----------
+    # ---------- the connection itself (runs on the server's event loop) ----------
 
     def start(self) -> None:
         if self._tasks:
@@ -175,7 +173,11 @@ class CryptoStream:
             t.cancel()
         self._tasks = []
 
+    async def _run(self) -> None:
+        raise NotImplementedError
+
     def _apply(self, updates: list[dict]) -> None:
+        """updates: {"symbol", "price", "open" (what the % change is measured from), ...}"""
         now = time.time()
         with self._lock:
             for u in updates:
@@ -194,6 +196,26 @@ class CryptoStream:
                 items = [self.prices[s] for s in self._dirty if s in self.prices]
                 self._dirty.clear()
             self._broadcast({"type": "prices", "items": items})
+
+
+class CryptoStream(LiveStream):
+    kind = "crypto"
+
+    def __init__(self, feeds=None):
+        super().__init__()
+        self.feeds = feeds or [ExchangeFeed(), AdvancedTradeFeed()]
+        self.wanted: list[str] = list(BASE)
+        self._ws = None
+        self._feed: Feed | None = None
+
+    def want(self, symbols) -> None:
+        """Also stream these coins (e.g. from the watchlist). Non-crypto symbols are ignored."""
+        new = [s for s in (x.upper() for x in symbols) if s.endswith("-USD") and s not in self.wanted]
+        if not new:
+            return
+        self.wanted += new
+        if self._loop and self._ws:
+            self._loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._subscribe(new)))
 
     async def _subscribe(self, products: list[str]) -> None:
         if not (self._ws and self._feed):

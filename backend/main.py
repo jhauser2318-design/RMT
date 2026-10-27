@@ -10,14 +10,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, fetch, markets, news, sports, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, fetch, markets, news, settings, sports, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -42,25 +42,42 @@ if os.getenv("RMT_DESKTOP") == "1":
     threading.Thread(target=_watch_idle, daemon=True).start()
 
 
+@app.middleware("http")
+async def only_rmt_can_change_things(request: Request, call_next):
+    """Changes (saving keys, asking the AI, updating) must come from RMT's own window.
+    Browsers won't let another website add this header, so a web page you visit
+    can't quietly use RMT behind your back."""
+    if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("X-RMT") != "1":
+        return JSONResponse({"detail": "Not allowed."}, status_code=403)
+    return await call_next(request)
+
+
 @app.on_event("startup")
 async def start_streams():
     if not fetch.demo_mode():
         stream.crypto.start()
+        alpaca.stocks.start()
+
+
+LIVE = [stream.crypto, alpaca.stocks]
 
 
 @app.get("/api/stream/status")
 def stream_status():
-    return {"crypto": stream.crypto.info()}
+    return {s.kind: s.info() for s in LIVE}
 
 
-@app.get("/api/stream/crypto")
-async def crypto_stream(request: Request):
-    """Server-sent events: every new crypto price, pushed to the window as it happens."""
+@app.get("/api/stream/live")
+async def live_stream(request: Request):
+    """Server-sent events: every new crypto and stock price, pushed to the window as it happens."""
     async def events():
-        q = stream.crypto.listen()
+        q = asyncio.Queue(maxsize=200)
+        for s in LIVE:
+            s.listen(q)
         try:
-            yield f"data: {json.dumps({'type': 'status', **stream.crypto.info()})}\n\n"
-            yield f"data: {json.dumps({'type': 'prices', 'items': stream.crypto.snapshot()})}\n\n"
+            for s in LIVE:
+                yield f"data: {json.dumps({'type': 'status', **s.info()})}\n\n"
+                yield f"data: {json.dumps({'type': 'prices', 'stream': s.kind, 'items': s.snapshot()})}\n\n"
             while not await request.is_disconnected():
                 try:
                     event = await asyncio.wait_for(q.get(), timeout=15)
@@ -68,9 +85,41 @@ async def crypto_stream(request: Request):
                 except asyncio.TimeoutError:
                     yield ": still here\n\n"  # keeps the connection open
         finally:
-            stream.crypto.unlisten(q)
+            for s in LIVE:
+                s.unlisten(q)
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+class AlpacaKeysIn(BaseModel):
+    key_id: str
+    secret: str
+
+
+@app.post("/api/settings/alpaca")
+def save_alpaca_keys(body: AlpacaKeysIn):
+    """Test the keys; if they work, save them in .env and start streaming with them."""
+    before = alpaca.keys()
+    os.environ["ALPACA_KEY_ID"], os.environ["ALPACA_SECRET_KEY"] = body.key_id.strip(), body.secret.strip()
+    ok, message = alpaca.test_keys()
+    if not ok:
+        os.environ["ALPACA_KEY_ID"], os.environ["ALPACA_SECRET_KEY"] = before
+        raise HTTPException(status_code=400, detail=message)
+    try:
+        settings.save({"ALPACA_KEY_ID": body.key_id, "ALPACA_SECRET_KEY": body.secret})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    fetch.forget("alpaca:")
+    alpaca.stocks.keys_changed()
+    return {"ok": True, "message": message}
+
+
+@app.delete("/api/settings/alpaca")
+def remove_alpaca_keys():
+    settings.save({"ALPACA_KEY_ID": "", "ALPACA_SECRET_KEY": ""})
+    fetch.forget("alpaca:")
+    alpaca.stocks.keys_changed()
+    return {"ok": True}
 
 
 @app.get("/api/app/info")
