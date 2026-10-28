@@ -86,7 +86,14 @@ Say "[2/5] Copying the app to $Target ..."
 if ($Source -ne $Target.TrimEnd("\")) {
     New-Item -ItemType Directory -Force -Path $Target | Out-Null
     # /E = include subfolders. Never copy over your data, key, or the Python environment.
-    & robocopy $Source $Target /E /XD .venv data __pycache__ .git /XF .env /NFL /NDL /NJH /NJS /NP | Out-Null
+    # Files left read-only (e.g. by an older copy) would stop robocopy, so clear that first.
+    if (Test-Path $Target) {
+        Get-ChildItem $Target -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notlike "*\.venv\*" -and $_.IsReadOnly } |
+            ForEach-Object { $_.IsReadOnly = $false }
+    }
+    # /R:2 /W:1 = if a file is in use, retry twice then move on (robocopy's default is to retry for days).
+    & robocopy $Source $Target /E /R:2 /W:1 /XD .venv data __pycache__ .git /XF .env /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "Copying the files failed (robocopy error $LASTEXITCODE)." }
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $Target "data") | Out-Null
