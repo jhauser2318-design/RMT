@@ -13,7 +13,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.
 - **Trading Talk**: the hottest posts on r/wallstreetbets, r/stocks, r/investing, r/options, r/Daytrading and r/StockMarket.
-- **YouTube**: the newest videos from CNBC, Bloomberg, Yahoo Finance, WSJ, Graham Stephan, Meet Kevin and Andrei Jikh. Search all of YouTube with an optional key.
+- **YouTube**: **🔥 Popular** shows the most-watched stock and investing advice videos of the week from popular channels (Graham Stephan, Andrei Jikh, Humphrey Yang, Minority Mindset, Financial Education, Ticker Symbol: YOU, Meet Kevin, Warrior Trading, Humbled Trader), with view counts. Tabs for 📈 Investing, ⚡ Day trading and 📰 Market news (CNBC, Bloomberg, Yahoo Finance, WSJ). With an optional key, Popular also includes the most-viewed advice from all of YouTube.
 
 ### 🎲 Betting
 - **Every game** in the NFL, college football, NBA, college basketball, WNBA, MLB, NHL, Premier League, La Liga, Champions League, MLS and UFC, with live scores.
@@ -64,7 +64,7 @@ Want **truly live** stock prices, crypto and odds for free? See the plan in [doc
 - **Where the data comes from:** crypto streams live from Coinbase. Otherwise RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
 - **"Sample data" badge:** if RMT can't reach a source (no internet, or a site is down), it shows made-up sample numbers and the badge in the top-right corner says **Sample data** instead of **LIVE**. Never bet or trade on sample numbers.
 - Prices can be delayed up to ~15 minutes. Without `ODDS_API_KEY` you get one sportsbook's line per game (usually ESPN BET or DraftKings).
-- To follow different YouTube channels, edit the `YOUTUBE_CHANNELS` list in `backend/news.py`. The tickers on the ribbons are in `backend/markets.py`.
+- To follow different YouTube channels, edit the `YOUTUBE_CHANNELS` lists in `backend/news.py`. The tickers on the ribbons are in `backend/markets.py`.
 - The chat uses Claude Opus 5.5 by default. To use a cheaper model, set `RMT_MODEL=claude-sonnet-5-5` in `.env`.
 
 ## For developers

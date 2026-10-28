@@ -95,6 +95,15 @@ def _when(raw: str) -> float:
         return 0
 
 
+def _views(entry) -> int | None:
+    """YouTube feeds carry each video's view count in media:group/media:community/media:statistics."""
+    stats = entry.find(f".//{MEDIA}statistics")
+    try:
+        return int(stats.get("views")) if stats is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 ATOM = "{http://www.w3.org/2005/Atom}"
 MEDIA = "{http://search.yahoo.com/mrss/}"
 YT = "{http://www.youtube.com/xml/schemas/2015}"
@@ -127,5 +136,6 @@ def parse_feed(data: bytes) -> list[dict]:
             "source": _text(it, f"{ATOM}author/{ATOM}name"),
             "image": thumb.get("url") if thumb is not None else "",
             "video_id": _text(it, f"{YT}videoId"),
+            "views": _views(it),
         })
     return items
