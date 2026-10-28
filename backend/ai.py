@@ -67,7 +67,8 @@ def _run_tool(name: str, args: dict):
         res = news.trading_talk()
         return {"live": res["live"], "items": [{k: i[k] for k in ("title", "source", "score", "comments", "link")} for i in res["items"][:20]]}
     if name == "get_games":
-        res = sports.games(args.get("league", "all"), args.get("date", ""))
+        # Only odds RMT already has (plus ESPN's free line): asking the chat never spends odds credits.
+        res = sports.games(args.get("league", "all"), args.get("date", ""), spend_odds=False)
         slim = []
         for g in res["games"][:40]:
             slim.append({"game": g["name"], "league": g["league_name"], "start": g["start"], "status": g["detail"],

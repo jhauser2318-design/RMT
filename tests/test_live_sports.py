@@ -88,6 +88,17 @@ def test_all_sports_never_spends_credits():
     assert calls["odds"] == 2
 
 
+def test_ai_chat_never_spends_odds_credits():
+    from backend import ai
+    setup()
+    ai._run_tool("get_games", {"league": "nfl"})
+    assert calls["odds"] == 0                           # the chat uses what's already fetched
+    sports.games("nfl")                                 # looking at the league yourself does fetch
+    assert calls["odds"] == 1
+    out = ai._run_tool("get_games", {"league": "nfl"})
+    assert out["games"][0]["books"] and calls["odds"] == 1  # ...and then the chat sees those odds for free
+
+
 def test_live_odds_label():
     setup()
     g = sports.games("nfl")["games"][0]
