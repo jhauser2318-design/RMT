@@ -151,6 +151,16 @@ def chat(history: list[dict]) -> dict:
     return {"reply": "That took too many steps. Try a narrower question.", "sources": sources[:8], "used": sorted(set(used))}
 
 
+def test_key(k: str) -> tuple[bool, str]:
+    """Check an Anthropic key by looking up the chat's model (uses no tokens)."""
+    model = os.getenv("RMT_MODEL", "").strip() or "claude-opus-5-5"
+    try:
+        anthropic.Anthropic(api_key=k).models.retrieve(model)
+    except Exception as e:  # noqa: BLE001
+        return False, friendly_error(e)[1]
+    return True, "✅ Key works. The Ask RMT chat is ready."
+
+
 def friendly_error(e: Exception) -> tuple[int, str]:
     if isinstance(e, (RuntimeError, ValueError)):
         return 400, str(e)

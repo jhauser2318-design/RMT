@@ -117,6 +117,54 @@ def test_watcher_pushes_only_changes():
     assert "nfl" not in w.live_leagues                  # no more live games: back to every 5 minutes
 
 
+def test_leagues_are_the_ones_bet_on():
+    assert list(sports.LEAGUES) == ["nfl", "ncaaf", "nba", "ncaab", "mlb", "nhl", "ufc"]  # no soccer, no WNBA
+
+
+def test_odds_key_check_reads_credits():
+    import io
+    import urllib.error
+    setup()
+    odds.get_with_headers = lambda url, params=None, timeout=10: (b"[]", {"x-requests-remaining": "500", "x-requests-used": "0"})
+    assert odds.test_key("good") == (True, "✅ Key works. 500 credits left this month.")
+    assert odds.budget()["remaining"] == 500
+
+    def refuse(url, params=None, timeout=10):
+        raise urllib.error.HTTPError(url, 401, "no", {}, io.BytesIO(b""))
+    odds.get_with_headers = refuse
+    ok, msg = odds.test_key("bad")
+    assert not ok and "didn't accept the key" in msg
+
+
+def test_save_key_endpoint():
+    import tempfile
+    from fastapi import HTTPException
+    from backend import main, settings
+    with tempfile.TemporaryDirectory() as tmp:
+        real = settings.ENV, settings.ROOT, dict(main.KEY_TESTS)
+        settings.ENV, settings.ROOT = Path(tmp) / ".env", Path(tmp)
+        main.KEY_TESTS["ODDS_API_KEY"] = lambda k: (k == "good", "✅ Key works." if k == "good" else "bad key")
+        try:
+            try:
+                main.save_key(main.KeyIn(name="ODDS_API_KEY", value="nope"))
+            except HTTPException as e:
+                assert e.status_code == 400 and e.detail == "bad key" and not settings.ENV.exists()  # bad keys never saved
+            res = main.save_key(main.KeyIn(name="ODDS_API_KEY", value=" good "))
+            assert res["ok"] and "ODDS_API_KEY=good" in settings.ENV.read_text()
+            assert main.which_keys()["ODDS_API_KEY"] is True
+            try:
+                main.save_key(main.KeyIn(name="ALPACA_KEY_ID", value="x"))  # has its own form
+            except HTTPException as e:
+                assert e.status_code == 400
+            else:
+                raise AssertionError("only keys with a test can be set here")
+        finally:
+            settings.ENV, settings.ROOT = real[0], real[1]
+            main.KEY_TESTS.clear()
+            main.KEY_TESTS.update(real[2])
+            os.environ["ODDS_API_KEY"] = ""
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

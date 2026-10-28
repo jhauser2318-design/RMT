@@ -180,7 +180,7 @@ def test_saving_keys_to_env():
         settings.ENV, settings.ROOT = Path(tmp) / ".env", Path(tmp)
         try:
             settings.ENV.write_text("ANTHROPIC_API_KEY=sk-ant-mine\nALPACA_KEY_ID=\n")
-            settings.save({"ALPACA_KEY_ID": " PKNEW ", "ALPACA_SECRET_KEY": "abc/123+=", "ANTHROPIC_API_KEY": "hacked"})
+            settings.save({"ALPACA_KEY_ID": " PKNEW ", "ALPACA_SECRET_KEY": "abc/123+=", "GITHUB_TOKEN": "hacked"})  # not editable from the app
             text = settings.ENV.read_text()
             assert text == "ANTHROPIC_API_KEY=sk-ant-mine\nALPACA_KEY_ID=PKNEW\nALPACA_SECRET_KEY=abc/123+=\n", text
             assert os.environ["ALPACA_KEY_ID"] == "PKNEW"

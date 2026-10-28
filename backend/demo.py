@@ -106,11 +106,10 @@ TEAMS = {
             ("Colorado Avalanche", "COL"), ("Toronto Maple Leafs", "TOR"), ("Dallas Stars", "DAL")],
     "ncaaf": [("Georgia Bulldogs", "UGA"), ("Ohio State Buckeyes", "OSU"), ("Texas Longhorns", "TEX"),
               ("Oregon Ducks", "ORE"), ("Alabama Crimson Tide", "ALA"), ("Notre Dame Fighting Irish", "ND")],
-    "epl": [("Arsenal", "ARS"), ("Manchester City", "MCI"), ("Liverpool", "LIV"), ("Chelsea", "CHE")],
     "mlb": [("Los Angeles Dodgers", "LAD"), ("New York Yankees", "NYY"), ("Atlanta Braves", "ATL"), ("Houston Astros", "HOU")],
 }
 NAMES = {"nfl": ("NFL", "🏈"), "nba": ("NBA", "🏀"), "nhl": ("NHL", "🏒"), "ncaaf": ("College Football", "🏈"),
-         "epl": ("Premier League", "⚽"), "mlb": ("MLB", "⚾")}
+         "mlb": ("MLB", "⚾")}
 BOOKS = ["DraftKings", "FanDuel", "BetMGM", "Caesars", "ESPN BET", "BetRivers"]
 
 
@@ -134,9 +133,9 @@ def games(ids: list[str]) -> list[dict]:
             (hn, ha), (an, aa) = teams[i], teams[i + 1]
             state = ["in", "pre", "pre", "post"][(i // 2) % 4]
             spread = round(r.uniform(-9, 9) * 2) / 2 or -1.5
-            if lg in ("epl", "mlb", "nhl"):
+            if lg in ("mlb", "nhl"):
                 spread = -1.5 if spread < 0 else 1.5
-            total = {"nfl": 45.5, "ncaaf": 52.5, "nba": 224.5, "nhl": 6.5, "epl": 2.5, "mlb": 8.5}[lg] + r.choice([-3, -1, 0, 1, 2])
+            total = {"nfl": 45.5, "ncaaf": 52.5, "nba": 224.5, "nhl": 6.5, "mlb": 8.5}[lg] + r.choice([-3, -1, 0, 1, 2])
             hml, aml = _ml_from_spread(spread)
             start = now + timedelta(hours={"in": -1, "pre": 3 + i, "post": -5}[state])
             hs, as_ = (str(r.randint(10, 31)), str(r.randint(7, 28))) if state != "pre" else ("", "")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV = ROOT / ".env"
-EDITABLE = {"ALPACA_KEY_ID", "ALPACA_SECRET_KEY", "FINNHUB_API_KEY"}  # only these can be changed from the app
+EDITABLE = {"ALPACA_KEY_ID", "ALPACA_SECRET_KEY", "FINNHUB_API_KEY", "ODDS_API_KEY", "ANTHROPIC_API_KEY"}  # only these can be changed from the app
 
 
 def save(values: dict[str, str]) -> None:

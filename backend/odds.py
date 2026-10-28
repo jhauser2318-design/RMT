@@ -61,6 +61,22 @@ def budget() -> dict:
             "every_min": None if g == float("inf") else round(g / 60), "configured": bool(key())}
 
 
+def test_key(k: str) -> tuple[bool, str]:
+    """Check a key with the free sports-list request; it also reports the credits left."""
+    try:
+        _, headers = get_with_headers("https://api.the-odds-api.com/v4/sports", {"apiKey": k})
+    except Exception as e:  # noqa: BLE001
+        code = getattr(e, "code", None)
+        if code in (401, 403):
+            return False, "The Odds API didn't accept the key. Copy it again from your email or account page."
+        return False, f"Couldn't reach The Odds API ({getattr(e, 'reason', e)})."
+    rem = headers.get("x-requests-remaining")
+    if rem is not None:
+        _budget.update(remaining=int(float(rem)), used=int(float(headers.get("x-requests-used") or 0)), at=time.time())
+    left = f" {int(float(rem))} credits left this month." if rem is not None else ""
+    return True, f"✅ Key works.{left}"
+
+
 def _parse(data: list) -> list[dict]:
     out = []
     for ev in data:
