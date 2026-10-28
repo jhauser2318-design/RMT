@@ -211,7 +211,7 @@ def test_chat_tools_answer():
     assert games["games"][1]["home"] == "Kansas City Chiefs 6-1 0"
     json.dumps(games)  # must be sendable to Claude
     names = {t["name"] for t in ai.TOOLS}
-    assert names == {"get_quotes", "get_market_news", "get_trading_talk", "get_games", "get_standings", "search_sports"}
+    assert names == {"get_quotes", "get_stock_details", "get_market_news", "get_trading_talk", "get_games", "get_standings", "search_sports"}
 
 
 def test_chat_without_key_explains():

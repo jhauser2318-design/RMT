@@ -98,6 +98,22 @@ function renderWatch() {
   $("#watch-chips").innerHTML = watch.map((s) => `<button class="chip" data-unwatch="${esc(s)}">${esc(s)}<span class="x">✕</span></button>`).join("");
 }
 
+function newsHTML(items) {
+  return items.map((i) => `<li>
+      <a class="title" href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a>
+      ${i.summary ? `<div class="summary">${esc(i.summary)}</div>` : ""}
+      <div class="meta"><span class="src">${esc(i.source)}</span><span>${timeAgo(i.time)}</span></div>
+    </li>`).join("") || `<li class="empty">No headlines found.</li>`;
+}
+
+function videosHTML(items, searchable) {
+  return items.map((v) => `<a class="video" href="${esc(v.link)}" target="_blank" rel="noopener">
+      <div class="thumb" style="${v.image ? `background-image:url('${esc(v.image)}')` : ""}">${v.image ? "" : "▶"}</div>
+      <div class="vt">${esc(v.title)}</div>
+      <div class="vm">${esc(v.source)}${v.views != null ? ` · <span class="views">${fmtViews(v.views)}</span>` : ""}${v.time ? ` · ${timeAgo(v.time)}` : ""}</div></a>`).join("")
+    || `<div class="empty">No matching videos from the followed channels.${searchable ? "" : " Add a YOUTUBE_API_KEY to search all of YouTube."}</div>`;
+}
+
 async function loadNews() {
   const list = $("#news");
   list.innerHTML = `<li class="empty">Loading headlines…</li>`;
@@ -105,11 +121,7 @@ async function loadNews() {
   $("#news-filter").innerHTML = `News for <b>${esc(tickerFilter)}</b> <button data-clear="news">✕ show all</button>`;
   try {
     const data = await api(`/markets/news?q=${encodeURIComponent(tickerFilter)}`);
-    list.innerHTML = data.items.map((i) => `<li>
-      <a class="title" href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a>
-      ${i.summary ? `<div class="summary">${esc(i.summary)}</div>` : ""}
-      <div class="meta"><span class="src">${esc(i.source)}</span><span>${timeAgo(i.time)}</span></div>
-    </li>`).join("") || `<li class="empty">No headlines found.</li>`;
+    list.innerHTML = newsHTML(data.items);
   } catch (e) { list.innerHTML = `<li class="empty">${esc(e.message)}</li>`; }
 }
 
@@ -146,21 +158,8 @@ async function loadVideos(q = tickerFilter) {
     · <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} stock`)}" target="_blank" rel="noopener">search on YouTube ↗</a>`;
   try {
     const data = await api(`/markets/videos?q=${encodeURIComponent(q)}&tab=${ytTab}`);
-    box.innerHTML = data.items.map((v) => `<a class="video" href="${esc(v.link)}" target="_blank" rel="noopener">
-      <div class="thumb" style="${v.image ? `background-image:url('${esc(v.image)}')` : ""}">${v.image ? "" : "▶"}</div>
-      <div class="vt">${esc(v.title)}</div>
-      <div class="vm">${esc(v.source)}${v.views != null ? ` · <span class="views">${fmtViews(v.views)}</span>` : ""}${v.time ? ` · ${timeAgo(v.time)}` : ""}</div></a>`).join("")
-      || `<div class="empty">No matching videos from the followed channels.${data.searchable ? "" : " Add a YOUTUBE_API_KEY to search all of YouTube."}</div>`;
+    box.innerHTML = videosHTML(data.items, data.searchable);
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
-}
-
-function filterTicker(sym) {
-  tickerFilter = sym;
-  $("#news-q").value = sym;
-  $("#yt-q").value = sym;
-  loadNews();
-  loadVideos();
-  $("#news").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 let marketsLoaded = false;
@@ -424,14 +423,271 @@ async function sendChat(text) {
   renderChat();
 }
 
+/* ============================ STOCK LOOKUP ============================ */
+
+const stockPage = { symbol: "", quote: null, range: store.get("chartRange", "1d"), info: null };
+
+// --- search box with suggestions ---
+let ssTimer = null, ssItems = [], ssActive = -1;
+
+function ssRender() {
+  const list = $("#ss-list");
+  list.hidden = !ssItems.length;
+  $("#ss-input").setAttribute("aria-expanded", String(!list.hidden));
+  list.innerHTML = ssItems.map((r, i) => `<button class="ss-item ${i === ssActive ? "active" : ""}" role="option" data-ss="${esc(r.symbol)}">
+    <b>${esc(r.symbol)}</b><span>${esc(r.name)}</span><small>${esc(r.type)}${r.exchange ? ` · ${esc(r.exchange)}` : ""}</small></button>`).join("");
+}
+
+$("#ss-input").addEventListener("input", () => {
+  clearTimeout(ssTimer);
+  const q = $("#ss-input").value.trim();
+  if (!q) { ssItems = []; ssRender(); return; }
+  ssTimer = setTimeout(async () => {
+    try { ssItems = await api(`/stock/search?q=${encodeURIComponent(q)}`); } catch { ssItems = []; }
+    ssActive = ssItems.length ? 0 : -1;
+    if ($("#ss-input").value.trim() === q) ssRender();
+  }, 200);
+});
+$("#ss-input").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (!ssItems.length) return;
+    ssActive = (ssActive + (e.key === "ArrowDown" ? 1 : -1) + ssItems.length) % ssItems.length;
+    ssRender();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    const pick = ssItems[ssActive]?.symbol || $("#ss-input").value.trim().toUpperCase();
+    if (pick) goStock(pick);
+  } else if (e.key === "Escape") { ssItems = []; ssRender(); }
+});
+$("#ss-input").addEventListener("blur", () => setTimeout(() => { ssItems = []; ssRender(); }, 150));
+$("#ss-list").addEventListener("mousedown", (e) => {
+  const b = e.target.closest("[data-ss]");
+  if (b) { e.preventDefault(); goStock(b.dataset.ss); }
+});
+
+function goStock(sym) {
+  $("#ss-input").value = "";
+  ssItems = [];
+  ssRender();
+  $("#ss-input").blur();
+  location.hash = `stock/${encodeURIComponent(sym)}`;
+}
+
+// --- the page ---
+function showStockPrice(q, flash = false) {
+  if (!q || q.price == null) return;
+  const prev = stockPage.quote?.price;
+  stockPage.quote = q;
+  const el = $("#st-price");
+  el.textContent = fmtPrice(q.price);
+  const ch = $("#st-change");
+  ch.className = `st-change ${dir(q.pct)}`;
+  ch.textContent = `${q.change >= 0 ? "+" : "−"}${fmtPrice(Math.abs(q.change))} (${fmtPct(q.pct).trim()}) today`;
+  const live = $("#st-live");
+  live.hidden = false;
+  live.className = `badge ${q.streaming ? "live" : ""}`;
+  live.textContent = q.streaming ? "LIVE" : q.realtime ? "Real-time" : "Delayed";
+  live.title = q.streaming ? "Streaming live" : q.realtime ? "Real-time from Alpaca, refreshed" : "From Yahoo Finance, can be up to ~15 minutes behind";
+  if (flash && prev != null && prev !== q.price) {
+    el.classList.remove("flash-up", "flash-down");
+    void el.offsetWidth;
+    el.classList.add(q.price > prev ? "flash-up" : "flash-down");
+  }
+}
+
+function stockLinks(sym, type) {
+  const s = encodeURIComponent(sym);
+  const links = [["Yahoo Finance", `https://finance.yahoo.com/quote/${s}`],
+    ["TradingView", `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym.replace("-", "."))}`]];
+  if (type === "Stock" || type === "ETF" || !type) {
+    links.push(["Finviz", `https://finviz.com/quote.ashx?t=${encodeURIComponent(sym.replace("-", "."))}`],
+      ["StockTwits", `https://stocktwits.com/symbol/${s}`]);
+  }
+  if (type === "Stock" || !type) links.push(["SEC filings", `https://www.sec.gov/edgar/search/#/q=${s}`]);
+  return links.map(([n, u]) => `<a class="chip" href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("");
+}
+
+async function openStock(sym) {
+  sym = sym.toUpperCase();
+  if (stockPage.symbol === sym && stockPage.info) return;
+  Object.assign(stockPage, { symbol: sym, quote: null, info: null });
+  window.scrollTo(0, 0);
+  $("#st-name").textContent = sym;
+  $("#st-sub").textContent = "Loading…";
+  $("#st-price").textContent = "—";
+  $("#st-change").textContent = "";
+  $("#st-live").hidden = true;
+  $("#st-stats").innerHTML = `<div class="empty">Loading…</div>`;
+  $("#st-profile").innerHTML = "";
+  $("#st-links").innerHTML = stockLinks(sym, "");
+  $("#st-news").innerHTML = `<li class="empty">Loading news…</li>`;
+  $("#st-videos").innerHTML = `<div class="empty">Loading videos…</div>`;
+  $("#st-watch").textContent = watch.includes(sym) ? "★ On your watchlist" : "☆ Add to watchlist";
+  loadChart();
+  try {
+    const info = await api(`/stock/info?symbol=${encodeURIComponent(sym)}`);
+    if (stockPage.symbol !== sym) return;
+    stockPage.info = info;
+    $("#st-name").textContent = info.name;
+    $("#st-sub").textContent = [info.symbol, info.type, info.exchange, info.currency !== "USD" ? info.currency : ""].filter(Boolean).join(" · ");
+    showStockPrice(info.quote);
+    $("#st-stats").innerHTML = info.stats.map((x) => `<div class="stat"><span>${esc(x.label)}</span><b>${esc(x.value)}</b></div>`).join("")
+      || `<div class="empty">No stats available.</div>`;
+    const note = $("#st-stats-note");
+    note.hidden = info.full_stats;
+    note.textContent = "Yahoo Finance didn't share the full stats (market cap, P/E, dividend…) just now. Use the links on the right for more.";
+    const p = info.profile || {};
+    $("#st-profile").innerHTML = [
+      p.sector || p.industry ? `<p><b>${esc([p.sector, p.industry].filter(Boolean).join(" · "))}</b></p>` : "",
+      p.employees ? `<p class="muted">${esc(p.employees)} employees</p>` : "",
+      p.summary ? `<p class="summary-text">${esc(p.summary)}</p>` : "",
+      p.website ? `<p><a href="${esc(p.website)}" target="_blank" rel="noopener">${esc(p.website.replace(/^https?:\/\//, ""))} ↗</a></p>` : "",
+    ].join("") || `<p class="muted">No company profile for this one.</p>`;
+    $("#st-links").innerHTML = stockLinks(sym, info.type);
+  } catch (e) {
+    $("#st-sub").textContent = e.message;
+    $("#st-stats").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+  const q = sym.replace(/-USD$/, "").replace(/^\^/, "");
+  api(`/markets/news?q=${encodeURIComponent(q)}`).then((d) => { if (stockPage.symbol === sym) $("#st-news").innerHTML = newsHTML(d.items.slice(0, 20)); })
+    .catch((e) => { $("#st-news").innerHTML = `<li class="empty">${esc(e.message)}</li>`; });
+  api(`/markets/videos?q=${encodeURIComponent(q)}`).then((d) => { if (stockPage.symbol === sym) $("#st-videos").innerHTML = videosHTML(d.items.slice(0, 12), d.searchable); })
+    .catch((e) => { $("#st-videos").innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+}
+
+function closeStock() {
+  stockPage.symbol = "";
+  stockPage.info = null;
+  api("/stock/close", {}).catch(() => {});  // free its live-stream slot
+}
+
+async function loadChart() {
+  const sym = stockPage.symbol, rng = stockPage.range;
+  $$("#st-ranges [data-range]").forEach((c) => c.classList.toggle("active", c.dataset.range === rng));
+  $("#st-chart").innerHTML = `<div class="empty">Loading chart…</div>`;
+  $("#st-range-change").textContent = "";
+  try {
+    const c = await api(`/stock/chart?symbol=${encodeURIComponent(sym)}&range=${rng}`);
+    if (stockPage.symbol !== sym || stockPage.range !== rng) return;
+    drawChart($("#st-chart"), c.points, c.prev_close, rng);
+  } catch (e) { $("#st-chart").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+// --- the price chart: one line, a crosshair + tooltip on hover ---
+const CHART_UP = "#2bf27f", CHART_DOWN = "#ff4d6a";
+
+function tickLabel(t, rng) {
+  const d = new Date(t * 1000);
+  if (rng === "1d") return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (rng === "5d") return d.toLocaleDateString([], { weekday: "short" });
+  if (rng === "5y") return String(d.getFullYear());
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function hoverLabel(t, rng) {
+  const d = new Date(t * 1000);
+  const date = d.toLocaleDateString([], { weekday: rng === "5d" ? "short" : undefined, month: "short", day: "numeric", year: ["1y", "5y"].includes(rng) ? "numeric" : undefined });
+  return ["1d", "5d", "1mo"].includes(rng) ? `${date}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : date;
+}
+
+function drawChart(el, pts, prevClose, rng) {
+  if (!pts || pts.length < 2) { el.innerHTML = `<div class="empty">No chart data for this range.</div>`; return; }
+  const W = Math.max(el.clientWidth, 300), H = 300, L = 8, R = 64, T = 14, B = 26;
+  const base = prevClose ?? pts[0][1];
+  const prices = pts.map((p) => p[1]).concat(prevClose != null ? [prevClose] : []);
+  let lo = Math.min(...prices), hi = Math.max(...prices);
+  const pad = (hi - lo || hi * 0.01 || 1) * 0.08;
+  lo -= pad; hi += pad;
+  // x by position, not time: no flat gaps over nights and weekends
+  const x = (i) => L + (i / (pts.length - 1)) * (W - L - R);
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const last = pts[pts.length - 1][1];
+  const color = last >= base ? CHART_UP : CHART_DOWN;
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+  const area = `${line}L${x(pts.length - 1).toFixed(1)},${H - B}L${x(0).toFixed(1)},${H - B}Z`;
+  const grid = [0, 1, 2, 3].map((k) => {
+    const v = lo + pad + (k / 3) * (hi - lo - 2 * pad);
+    return `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="grid"/>
+      <text x="${W - R + 8}" y="${(y(v) + 4).toFixed(1)}" class="axis">${fmtPrice(v)}</text>`;
+  }).join("");
+  const ticks = 5;
+  const xlabels = Array.from({ length: ticks }, (_, k) => Math.round((k / (ticks - 1)) * (pts.length - 1))).map((i, k) =>
+    `<text x="${x(i).toFixed(1)}" y="${H - 7}" class="axis" text-anchor="${k === 0 ? "start" : k === ticks - 1 ? "end" : "middle"}">${esc(tickLabel(pts[i][0], rng))}</text>`).join("");
+  const prevLine = prevClose != null ? `<line x1="${L}" x2="${W - R}" y1="${y(prevClose).toFixed(1)}" y2="${y(prevClose).toFixed(1)}" class="prev"/>
+    <text x="${L + 4}" y="${(y(prevClose) - 5).toFixed(1)}" class="axis">Prev close ${fmtPrice(prevClose)}</text>` : "";
+  const chg = last - base, chgPct = (chg / base) * 100;
+  $("#st-range-change").innerHTML = `<span class="${dir(chg)}">${chg >= 0 ? "+" : "−"}${fmtPrice(Math.abs(chg))} (${fmtPct(chgPct).trim()})</span> <span class="muted">${{ "1d": "today", "5d": "past 5 days", "1mo": "past month", "6mo": "past 6 months", ytd: "this year", "1y": "past year", "5y": "past 5 years" }[rng]}</span>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+      aria-label="${esc(stockPage.symbol)} price, ${esc(hoverLabel(pts[0][0], rng))} to ${esc(hoverLabel(pts[pts.length - 1][0], rng))}: ${fmtPrice(pts[0][1])} to ${fmtPrice(last)}">
+    <defs><linearGradient id="st-fill" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity="0.22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}${prevLine}
+    <path d="${area}" fill="url(#st-fill)"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${xlabels}
+    <g class="cross" visibility="hidden"><line class="cross-line" y1="${T}" y2="${H - B}"/><circle r="4.5" fill="${color}" stroke="#0d1c14" stroke-width="2"/></g>
+    <rect x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent" class="hit"/>
+  </svg><div class="chart-tip" hidden></div>`;
+  const svg = el.querySelector("svg"), cross = svg.querySelector(".cross"), tip = el.querySelector(".chart-tip");
+  const move = (clientX) => {
+    const r = svg.getBoundingClientRect();
+    const px = ((clientX - r.left) / r.width) * W;
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round(((px - L) / (W - L - R)) * (pts.length - 1))));
+    const [t, v] = pts[i];
+    cross.setAttribute("visibility", "visible");
+    cross.querySelector("line").setAttribute("x1", x(i)); cross.querySelector("line").setAttribute("x2", x(i));
+    cross.querySelector("circle").setAttribute("cx", x(i)); cross.querySelector("circle").setAttribute("cy", y(v));
+    const c = v - base;
+    tip.hidden = false;
+    tip.innerHTML = `<b>${fmtPrice(v)}</b> <span class="${dir(c)}">${fmtPct((c / base) * 100).trim()}</span><br><span class="muted">${esc(hoverLabel(t, rng))}</span>`;
+    const left = (x(i) / W) * r.width;
+    tip.style.left = `${Math.min(Math.max(left - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth)}px`;
+  };
+  const hide = () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; };
+  svg.addEventListener("pointermove", (e) => move(e.clientX));
+  svg.addEventListener("pointerleave", hide);
+}
+
+$("#st-ranges").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-range]");
+  if (!b) return;
+  stockPage.range = b.dataset.range;
+  store.set("chartRange", stockPage.range);
+  loadChart();
+});
+$("#stock-back").addEventListener("click", () => { if (history.length > 1) history.back(); else location.hash = "markets"; });
+$("#st-watch").addEventListener("click", () => {
+  const sym = stockPage.symbol;
+  if (!watch.includes(sym)) {
+    watch = [sym, ...watch].slice(0, 30);
+    store.set("watch", watch);
+    renderWatch();
+    $("#ribbons").dataset.layout = "";  // redraw the ribbons with the new watchlist next time
+  }
+  $("#st-watch").textContent = "★ On your watchlist";
+});
+$("#st-ask").addEventListener("click", () => {
+  const n = stockPage.info?.name || stockPage.symbol;
+  openChat(`Give me a quick read on ${n} (${stockPage.symbol}): what's moving it lately, key numbers vs. peers, upcoming catalysts like earnings, and the main bull and bear case.`);
+});
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (!$("#stock").hidden && stockPage.symbol) loadChart(); }, 250);
+});
+
 /* ============================ WIRING ============================ */
 
 function showMode() {
-  const mode = location.hash === "#sports" ? "sports" : "markets";
+  const stockSym = location.hash.startsWith("#stock/") ? decodeURIComponent(location.hash.slice(7)) : "";
+  const mode = stockSym ? "stock" : location.hash === "#sports" ? "sports" : "markets";
   $$(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   $("#markets").hidden = mode !== "markets";
   $("#sports").hidden = mode !== "sports";
-  if (mode === "markets") showMarkets(); else showSports();
+  $("#stock").hidden = mode !== "stock";
+  if (mode !== "stock" && stockPage.symbol) closeStock();
+  if (mode === "markets") showMarkets(); else if (mode === "sports") showSports(); else openStock(stockSym);
   if (!$("#chat").hidden) renderChat();
 }
 
@@ -448,7 +704,7 @@ document.addEventListener("click", (e) => {
   if (!t) return;
   const d = t.dataset;
   if (d.mode) location.hash = d.mode;
-  else if (d.sym) filterTicker(d.sym);
+  else if (d.sym) location.hash = `stock/${encodeURIComponent(d.sym)}`;
   else if (d.unwatch) { watch = watch.filter((s) => s !== d.unwatch); store.set("watch", watch); renderWatch(); loadRibbons(); }
   else if (d.clear) { tickerFilter = ""; $("#news-q").value = ""; $("#yt-q").value = ""; d.clear === "news" ? loadNews() : loadVideos(""); }
   else if (d.league) {
@@ -522,6 +778,7 @@ const lastPx = {};
 
 function applyLive(items) {
   for (const p of items) {
+    if (p.symbol === stockPage.symbol) showStockPrice({ ...stockPage.quote, price: p.price, change: p.change, pct: p.pct, streaming: true }, true);
     const els = $$(`#ribbons .tick[data-sym="${CSS.escape(p.symbol)}"]`);
     const prev = lastPx[p.symbol];
     lastPx[p.symbol] = p.price;

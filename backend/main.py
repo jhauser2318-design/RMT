@@ -17,7 +17,7 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, fetch, markets, news, settings, sports, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, fetch, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -189,6 +189,43 @@ def get_ribbons(watch: str = ""):
 def get_quotes(symbols: str):
     found, live = markets.quotes(symbols.split(","))
     return {"live": live, "quotes": found}
+
+
+@app.get("/api/stock/search")
+def stock_search(q: str):
+    return stock.search(q)
+
+
+@app.get("/api/stock/info")
+def stock_info(symbol: str):
+    """Everything for a stock's page except the chart: name, live price, key stats, profile."""
+    try:
+        info = stock.details(symbol)
+    except stock.StockError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    sym = info["symbol"]
+    stream.crypto.want([sym])
+    alpaca.stocks.set_focus(sym)  # stream it live while its page is open
+    found, live = markets.quotes([sym])
+    info["quote"] = found[0] if found else None
+    info["live"] = live
+    return info
+
+
+@app.get("/api/stock/chart")
+def stock_chart(symbol: str, range: str = "1d"):  # noqa: A002 (matches the page's "range" buttons)
+    try:
+        c = stock.chart(symbol, range)
+    except stock.StockError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {k: c[k] for k in ("symbol", "range", "points", "prev_close")}
+
+
+@app.post("/api/stock/close")
+def stock_close():
+    """The stock's page was closed: stop giving it a live-stream slot."""
+    alpaca.stocks.set_focus(None)
+    return {"ok": True}
 
 
 @app.get("/api/markets/news")

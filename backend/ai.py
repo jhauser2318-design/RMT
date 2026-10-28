@@ -10,7 +10,7 @@ from datetime import datetime
 
 import anthropic
 
-from . import markets, news, sports
+from . import markets, news, sports, stock
 
 MAX_ROUNDS = 8
 
@@ -18,6 +18,8 @@ TOOLS = [
     {"name": "get_quotes", "description": "Current price, change and % change for stock, ETF, index (^GSPC), futures (ES=F) or crypto (BTC-USD) symbols, in Yahoo Finance format.",
      "input_schema": {"type": "object", "properties": {"symbols": {"type": "array", "items": {"type": "string"}, "maxItems": 30}},
                       "required": ["symbols"]}},
+    {"name": "get_stock_details", "description": "Key stats for one stock, ETF, index or coin: market cap, P/E, EPS, dividend yield, beta, 52-week range, volume, analyst target, next earnings date, sector/industry and a business summary. Use Yahoo Finance symbols (AAPL, BRK-B, ^GSPC, BTC-USD).",
+     "input_schema": {"type": "object", "properties": {"symbol": {"type": "string"}}, "required": ["symbol"]}},
     {"name": "get_market_news", "description": "Latest market headlines from CNBC, MarketWatch, Yahoo Finance and others. Give a ticker or topic to get news about it, or leave it empty for the top stories.",
      "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}}},
     {"name": "get_trading_talk", "description": "The most upvoted posts right now on r/wallstreetbets, r/stocks, r/investing, r/options, r/Daytrading and r/StockMarket.",
@@ -51,6 +53,10 @@ How to answer:
 
 
 def _run_tool(name: str, args: dict):
+    if name == "get_stock_details":
+        info = stock.details(args.get("symbol", ""))
+        found, live = markets.quotes([info["symbol"]])
+        return {**info, "quote": found[0] if found else None, "live": live}
     if name == "get_quotes":
         found, live = markets.quotes(args.get("symbols") or [])
         return {"live": live, "quotes": [{k: q[k] for k in ("symbol", "name", "price", "change", "pct")} for q in found]}
