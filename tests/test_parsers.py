@@ -295,6 +295,83 @@ def test_update_installs_new_version_and_keeps_keys():
             updater.ROOT, updater.VERSION_FILE, updater._get = real
 
 
+def test_update_works_around_files_windows_wont_overwrite():
+    """The real failure: "[Errno 13] Permission denied: ...\\INSTALL.bat" stopped a whole update."""
+    import io
+    import shutil as _sh
+    import tempfile
+    import zipfile
+    import updater
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "backend").mkdir()
+        (root / "docs").mkdir()
+        for name, text in {"INSTALL.bat": "old", "backend/app.py": "v1", "backend/locked.py": "v1", "docs/guide.md": "v1",
+                           "requirements.txt": "x\n", ".env": "KEY=mine"}.items():
+            (root / name).write_text(text)
+
+        def zipped(version):
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as z:
+                for name in ("INSTALL.bat", "backend/app.py", "backend/locked.py", "docs/guide.md", "scripts/install.ps1"):
+                    z.writestr(f"RMT-abc/{name}", version)
+                z.writestr("RMT-abc/requirements.txt", "x\n")
+            return buf.getvalue()
+
+        real_copy = _sh.copy2
+        calls = {}
+
+        def picky_copy(src, dest):
+            dest = Path(dest)
+            calls[dest.name] = calls.get(dest.name, 0) + 1
+            if dest.name == "INSTALL.bat":
+                raise PermissionError(13, "Permission denied", str(dest))  # what happened on the PC
+            if dest.name == "locked.py" and state["sha"] == "b" * 40 and dest.exists() and calls[dest.name] <= 2:
+                raise PermissionError(13, "Permission denied", str(dest))  # in use: only a move-aside works
+            if dest.name == "guide.md":
+                raise PermissionError(13, "Permission denied", str(dest))  # never writable: optional, skipped
+            return real_copy(src, dest)
+
+        state = {"zip": zipped("v2"), "sha": "b" * 40}
+
+        def fake_get(url, timeout=15):
+            if "zipball" in url:
+                return state["zip"]
+            return json.dumps({"sha": state["sha"], "commit": {"message": "Fix updates", "committer": {"date": ""}}}).encode()
+        saved = (updater.ROOT, updater.VERSION_FILE, updater._get, updater.shutil.copy2)
+        updater.ROOT, updater.VERSION_FILE, updater._get = root, root / "data" / "version.json", fake_get
+        updater.shutil.copy2 = picky_copy
+        try:
+            res = updater.update()
+            assert res["updated"] and res["error"] is None, res
+            assert (root / "INSTALL.bat").read_text() == "old" and "INSTALL.bat" not in calls  # never touched
+            assert not (root / "scripts").exists()  # install-only folder skipped
+            assert (root / "backend" / "app.py").read_text() == "v2"
+            assert (root / "backend" / "locked.py").read_text() == "v2"  # the locked one was moved aside
+            assert (root / "docs" / "guide.md").read_text() == "v1"  # optional file left as it was
+            assert (root / ".env").read_text() == "KEY=mine"
+            assert len(list(root.rglob("*.rmt-old*"))) == 1
+
+            # Next update: the moved-aside file is cleaned up.
+            state.update(zip=zipped("v3"), sha="c" * 40)
+            calls.clear()
+            assert updater.update()["updated"]
+            assert not list(root.rglob("*.rmt-old*")) and (root / "backend" / "app.py").read_text() == "v3"
+
+            # A file RMT needs that truly can't be replaced: the update stops and says why.
+            state.update(zip=zipped("v4"), sha="d" * 40)
+            updater.shutil.copy2 = lambda s, d: (_ for _ in ()).throw(PermissionError(13, "Permission denied", str(d)))
+            real_replace = updater.os.replace
+            updater.os.replace = lambda a, b: (_ for _ in ()).throw(PermissionError(13, "Permission denied", str(a)))
+            try:
+                res = updater.update()
+            finally:
+                updater.os.replace = real_replace
+            assert not res["updated"] and "antivirus" in res["error"] and "still in place" in res["error"]
+        finally:
+            updater.ROOT, updater.VERSION_FILE, updater._get, updater.shutil.copy2 = saved
+
+
 def test_automatic_updates_switch_and_launcher():
     import importlib.machinery
     import importlib.util

@@ -20,9 +20,11 @@ import os
 import shutil
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -35,6 +37,12 @@ BRANCH = "main"
 ROOT = Path(__file__).resolve().parent
 VERSION_FILE = ROOT / "data" / "version.json"
 KEEP = {".venv", "data", ".env", ".git"}   # never overwritten by an update
+# Only used for the first install, so an update never touches them. (Antivirus programs
+# often stop other programs from rewriting .bat / .ps1 files, which used to fail updates.)
+INSTALL_ONLY = {"INSTALL.bat", "start.bat", "start.sh", "scripts"}
+# Not needed to run RMT: if Windows won't let one be replaced, the update carries on without it.
+OPTIONAL = {".github", "tests", "docs", "README.md", "LICENSE", ".gitattributes", ".gitignore", ".env.example"}
+OLD_SUFFIX = ".rmt-old"  # files Windows wouldn't overwrite are moved aside with this, and removed next time
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -127,6 +135,40 @@ def check() -> dict:
     return {"available": latest["sha"] != current.get("sha"), "current": current, "latest": latest, "error": None}
 
 
+def _place(src: Path, dest: Path) -> None:
+    """Copy src over dest, working around what Windows can throw at it."""
+    try:
+        shutil.copy2(src, dest)
+        return
+    except PermissionError:
+        pass
+    try:  # a read-only file: make it writable and try again
+        os.chmod(dest, stat.S_IWRITE | stat.S_IREAD)
+        shutil.copy2(src, dest)
+        return
+    except (PermissionError, FileNotFoundError):
+        pass
+    # In use or locked: Windows still lets you rename it, so move it aside and put the new one in place.
+    aside = dest.with_name(f"{dest.name}{OLD_SUFFIX}{int(time.time())}")
+    os.replace(dest, aside)
+    try:
+        shutil.copy2(src, dest)
+    except OSError:
+        os.replace(aside, dest)  # put the original back: never leave a file missing
+        raise
+
+
+def _clean_old() -> None:
+    for old in ROOT.rglob(f"*{OLD_SUFFIX}*"):
+        if ".venv" in old.parts:
+            continue
+        try:
+            os.chmod(old, stat.S_IWRITE | stat.S_IREAD)
+            old.unlink()
+        except OSError:
+            pass  # still in use: try again after the next update
+
+
 def update() -> dict:
     """Install the newest version. {"updated": bool, "error": str | None, "summary": str}"""
     try:
@@ -142,18 +184,30 @@ def update() -> dict:
         with tempfile.TemporaryDirectory() as tmp:
             zipfile.ZipFile(io.BytesIO(archive)).extractall(tmp)
             src = next(Path(tmp).iterdir())  # the ZIP holds one top-level folder
+            _clean_old()
+            skipped = []
             for path in sorted(src.rglob("*")):
                 rel = path.relative_to(src)
-                if rel.parts[0] in KEEP:
+                if rel.parts[0] in KEEP or rel.parts[0] in INSTALL_ONLY:
                     continue
                 dest = ROOT / rel
                 if path.is_dir():
                     dest.mkdir(parents=True, exist_ok=True)
-                else:
-                    shutil.copy2(path, dest)
+                    continue
+                try:
+                    _place(path, dest)
+                except OSError as e:
+                    if rel.parts[0] not in OPTIONAL:
+                        raise
+                    skipped.append(str(rel))
+                    logging.info("Update: left %s as it was (%s)", rel, e)
+            if skipped:
+                logging.warning("Update installed without these optional files: %s", ", ".join(skipped))
     except Exception as e:  # noqa: BLE001
         logging.warning("Update failed, keeping the current version (%s)", e)
-        return {"updated": False, "error": f"The update couldn't be installed ({e}). The current version is still in place.", "summary": ""}
+        hint = (" Windows wouldn't let RMT replace one of its files; antivirus software can do this."
+                " Closing RMT and opening it again usually fixes it.") if isinstance(e, PermissionError) else ""
+        return {"updated": False, "error": f"The update couldn't be installed ({e}).{hint} The current version is still in place.", "summary": ""}
 
     if (ROOT / "requirements.txt").read_bytes() != before:
         python = Path(sys.executable).with_name("python.exe")
