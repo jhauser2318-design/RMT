@@ -311,6 +311,22 @@ def get_games(league: str = "all", date: str = ""):
     return sports.games(league, date)
 
 
+@app.get("/api/sports/more-groups")
+def more_groups(league: str):
+    return odds.groups(league)
+
+
+@app.post("/api/sports/more")
+def more_bets(league: str, event: str, group: str, force: bool = False):
+    """Player props, halves/quarters, alternate lines… for one game. Spends odds credits."""
+    if league not in sports.LEAGUES:
+        raise HTTPException(status_code=400, detail="Unknown league.")
+    try:
+        return odds.more_bets(league, sports.LEAGUES[league][2], event, group, force)
+    except odds.OddsError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/sports/odds-now")
 def odds_now(league: str):
     """"Update odds now" for one league: spends 3 credits right away."""

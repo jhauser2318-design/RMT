@@ -160,6 +160,7 @@ def _league_games(league: str, date: str = "", espn_ttl: float = 60, odds_viewin
                     "away": {"name": line["away"], "short": line["away"], "abbr": "", "logo": "", "record": "", "score": "", "winner": False, "color": ""}}
             games.append(game)
         game["books"] = line["books"]
+        game["odds_event_id"] = line.get("event_id", "")
         game["best"] = _best(line["books"])
         game["odds_at"] = fetched_at
         # Fetched after kickoff = live, in-play prices.

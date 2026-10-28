@@ -249,6 +249,7 @@ function gameCard(g) {
     </div>
     <div class="game-actions">
       ${g.books?.length ? `<button class="btn" data-books="${esc(g.id)}">${openBooks.has(g.id) ? "Hide" : "Compare"} ${g.books.length} ${g.books.length === 1 ? "book" : "books"}</button>` : ""}
+      ${g.odds_event_id && g.league !== "ufc" ? `<button class="btn" data-more="${esc(g.id)}" title="Player props, halves, quarters, alternate lines">＋ More bets</button>` : ""}
       <button class="btn-outline" data-ask-game="${esc(g.id)}">✨ Ask RMT</button>
       ${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">Gamecast ↗</a>` : ""}
     </div>
@@ -381,6 +382,55 @@ async function showSports() {
   }
   loadGames();
 }
+
+/* ============================ MORE BETS ============================ */
+
+const more = { game: null, group: "", groups: {} };
+
+async function openMore(id) {
+  const g = gamesData.games.find((x) => x.id === id);
+  if (!g) return;
+  more.game = g;
+  $("#more").hidden = false;
+  $("#more-title").textContent = `${g.away.short || g.away.name} @ ${g.home.short || g.home.name}`;
+  $("#more-sub").textContent = `${g.league_name} · ${g.state === "pre" ? localTime(g.start) : g.detail}`;
+  $("#more-body").innerHTML = "";
+  $("#more-note").innerHTML = "Pick what you want to see. Each one uses Odds API credits, so nothing loads until you click.";
+  if (!more.groups[g.league]) {
+    try { more.groups[g.league] = await api(`/sports/more-groups?league=${g.league}`); } catch { more.groups[g.league] = []; }
+  }
+  $("#more-groups").innerHTML = more.groups[g.league].map((x) =>
+    `<button class="chip" data-more-group="${esc(x.name)}" title="Up to ${x.markets} credits">${esc(x.name)} <small>≈${x.markets}</small></button>`).join("")
+    || `<span class="muted">No extra bets for this league.</span>`;
+}
+
+async function loadMore(group, force = false) {
+  const g = more.game;
+  if (!g) return;
+  more.group = group;
+  $$("#more-groups .chip").forEach((c) => c.classList.toggle("active", c.dataset.moreGroup === group));
+  $("#more-body").innerHTML = `<div class="empty">Loading ${esc(group.toLowerCase())}…</div>`;
+  try {
+    const q = `league=${g.league}&event=${encodeURIComponent(g.odds_event_id)}&group=${encodeURIComponent(group)}${force ? "&force=true" : ""}`;
+    const r = await api(`/sports/more?${q}`, {});
+    if (more.game !== g || more.group !== group) return;
+    const left = r.budget?.remaining != null ? ` · ${r.budget.remaining} credits left` : "";
+    const cost = r.cached ? "just loaded, no credits used" : r.cost != null ? `used ${r.cost} credit${r.cost === 1 ? "" : "s"}` : "";
+    $("#more-note").innerHTML = `${g.state === "in" ? '<span class="live-dot">●</span> Live prices · ' : ""}Updated ${ago(r.fetched_at)}${cost ? ` (${cost})` : ""}${left}
+      · <button class="link-btn" data-more-refresh>↻ Refresh</button>`;
+    $("#more-body").innerHTML = r.markets.map((m) => `<section class="more-market"><h4>${esc(m.label)}</h4>
+      <table class="books"><thead><tr><th>${m.rows.some((x) => x.player) ? "Player" : "Pick"}</th><th></th><th>Best</th><th>Book</th></tr></thead><tbody>
+      ${m.rows.map((x) => `<tr title="${esc(x.books.map((b) => `${b.book} ${oddsFmt(b.price)}`).join(" · "))}">
+        <td>${esc(x.player || x.side)}</td>
+        <td>${x.player ? esc(x.side) : ""}${x.point != null ? ` ${esc(x.player || /total/i.test(m.key) ? x.point : pt(x.point))}` : ""}</td>
+        <td class="best">${oddsFmt(x.best.price)}</td><td class="muted">${esc(x.best.book)}${x.books.length > 1 ? ` <small>+${x.books.length - 1}</small>` : ""}</td></tr>`).join("")}
+      </tbody></table></section>`).join("") || `<div class="empty">No sportsbook is offering these for this game right now.</div>`;
+  } catch (e) {
+    if (more.game === g) $("#more-body").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+
+$("#more-close").addEventListener("click", () => { $("#more").hidden = true; more.game = null; });
 
 /* ============================ CHAT ============================ */
 
@@ -742,6 +792,13 @@ function showMode() {
 }
 
 document.addEventListener("click", (e) => {
+  const mb = e.target.closest("[data-more],[data-more-group],[data-more-refresh]");
+  if (mb) {
+    if (mb.dataset.more) openMore(mb.dataset.more);
+    else if (mb.dataset.moreGroup) loadMore(mb.dataset.moreGroup);
+    else loadMore(more.group, true);
+    return;
+  }
   if (e.target.id === "odds-now") {
     e.target.textContent = "Updating odds…";
     api(`/sports/odds-now?league=${league}`, {}).then((d) => { gamesData = d; renderGames(); })
@@ -819,7 +876,7 @@ $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat
 $("#chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat($("#chat-input").value); }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#chat").hidden = true; $("#settings").hidden = true; } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#chat").hidden = true; $("#settings").hidden = true; $("#more").hidden = true; } });
 
 $("#odds-format").value = store.get("oddsFormat", "american");
 window.addEventListener("hashchange", showMode);

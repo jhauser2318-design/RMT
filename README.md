@@ -19,6 +19,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 ### 🎲 Betting
 - **Every game** in the NFL, college football, NBA, college basketball, MLB, NHL and UFC, with live scores.
 - **Live scores**: games in progress update every 15 seconds by themselves (no refresh), and the score flashes when it changes.
+- **More bets** (with an Odds API key): **＋ More bets** on a game opens player props (passing/rushing/receiving yards, TDs, points, rebounds, assists, threes, hits, home runs, strikeouts, shots on goal…), 1st half, 1st quarter / 1st period / first 5 innings, alternate lines and team totals, with the best price and which sportsbook has it, live during games. Nothing loads until you pick one, since they use credits (each tab shows about how many).
 - **Live odds**: with an Odds API key, lines from many sportsbooks keep updating during games, marked **⚡ Live odds** (otherwise a game shows its **Pre-game line**). RMT spreads your monthly odds credits evenly so they last the month (free plan: about every 1-3 hours per league you look at; $30 plan: every few minutes). "All sports" never uses credits; pick a league and click **Update odds now** to refresh it on the spot (3 credits).
 - **Odds on every game**: moneyline, spread and total. Switch between American odds, decimal odds and win %.
 - **Compare sportsbooks** (optional free key): DraftKings, FanDuel, BetMGM, Caesars and more side by side, with the best price highlighted.
