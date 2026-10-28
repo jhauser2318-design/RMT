@@ -109,6 +109,19 @@ def set_auto(on: bool) -> None:
     SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def code_fingerprint(root: Path = ROOT) -> str:
+    """A short id for the program code on disk. The running server reports the one it
+    started with, so the launcher can tell when an older RMT is still running."""
+    import hashlib
+    h = hashlib.sha1()
+    for f in sorted([*root.glob("backend/*.py"), root / "updater.py"]):
+        try:
+            h.update(f.name.encode() + f.read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()[:12]
+
+
 def installed() -> dict:
     try:
         return json.loads(VERSION_FILE.read_text(encoding="utf-8"))

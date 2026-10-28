@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
 
 app = FastAPI(title="RMT: Risky Money Time")
+CODE = updater.code_fingerprint()  # the code this server started with (see launcher.pyw)
 FRONTEND = ROOT / "frontend"
 
 # Desktop mode: the open window checks in every 15 seconds. When it's been
@@ -151,7 +152,7 @@ def remove_alpaca_keys():
 def app_info():
     v = updater.installed()
     return {"pid": os.getpid(), "version": v.get("sha", "")[:7], "summary": v.get("summary", ""),
-            "updated_at": v.get("updated_at", ""), "desktop": os.getenv("RMT_DESKTOP") == "1"}
+            "updated_at": v.get("updated_at", ""), "desktop": os.getenv("RMT_DESKTOP") == "1", "code": CODE}
 
 
 @app.post("/api/app/ping")
@@ -307,6 +308,16 @@ def post_chat(body: ChatIn):
     except Exception as e:  # noqa: BLE001
         status, msg = ai.friendly_error(e)
         raise HTTPException(status_code=status, detail=msg)
+
+
+RESTART_HINT = ("This part of RMT isn't in the version that's running. Close every RMT window, "
+                "wait a few seconds, and open RMT again to finish updating.")
+
+
+@app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+def unknown_api(rest: str):
+    """A newer window asking an older server (or a typo): say what to do, not "Method Not Allowed"."""
+    raise HTTPException(status_code=404, detail=RESTART_HINT)
 
 
 @app.get("/")
