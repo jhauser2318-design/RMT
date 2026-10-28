@@ -17,3 +17,4 @@ jobs:
       - run: python tests/test_stream.py
       - run: python tests/test_alpaca.py
       - run: python tests/test_stock.py
+      - run: python tests/test_finnhub.py

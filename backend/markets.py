@@ -9,7 +9,7 @@ and the page says so.
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from . import alpaca, demo
+from . import alpaca, demo, finnhub
 from .fetch import cached, demo_mode, get_json
 from .stream import crypto
 
@@ -72,7 +72,29 @@ def _realtime(q: dict, snaps: dict) -> dict:
         prev = sn["prev"] or (q["price"] - q["change"] if q.get("price") is not None else None)
         change = sn["price"] - prev if prev else 0.0
         q = {**q, "price": sn["price"], "change": change, "pct": (change / prev * 100) if prev else 0.0, "realtime": True}
-    return alpaca.stocks.overlay(crypto.overlay(q))
+    return alpaca.stocks.overlay(finnhub.stocks.overlay(crypto.overlay(q)))
+
+
+_priority: list[str] = []  # what to stream, most important first (see ribbons)
+
+
+def assign_streams(priority: list[str] | None = None) -> None:
+    """Split the stocks to stream live: Alpaca takes the first 30, Finnhub the next 50.
+    The stock whose page is open always goes first (alpaca.stocks.focus)."""
+    global _priority
+    if priority is not None:
+        _priority = priority
+    focus = alpaca.stocks.focus
+    order = list(dict.fromkeys(s for s in ([focus] if focus else []) + _priority if alpaca.is_stock(s)))
+    alpaca.stocks.set_wanted(order)  # it keeps the focus first and uses the first 30
+    taken = order[:alpaca.MAX_STREAM] if alpaca.configured() else []
+    finnhub.stocks.set_wanted([s for s in order if s not in taken])
+
+
+def focus(symbol: str | None) -> None:
+    """A stock's page opened (or closed, with None): stream it live first."""
+    alpaca.stocks.focus = symbol if symbol and alpaca.is_stock(symbol) else None
+    assign_streams()
 
 
 def quotes(symbols: list[str]) -> tuple[list[dict], bool]:
@@ -89,6 +111,7 @@ def quotes(symbols: list[str]) -> tuple[list[dict], bool]:
                 snaps = {}
             got = yahoo.result()
         if got:
+            finnhub.stocks.learn_prev({q["symbol"]: q["price"] - q["change"] for q in got if q.get("price") is not None})
             return [_realtime(q, snaps) for q in got], True
         # Yahoo is down: use whatever real prices we have (Alpaca, the live streams).
         real = [_realtime({"symbol": s, "name": s, "price": None, "change": 0, "pct": 0, "currency": "USD", "spark": []}, snaps)
@@ -105,9 +128,10 @@ def ribbons(extra: list[str] | None = None) -> dict:
     if extra:
         groups.insert(0, {"id": "watch", "name": "My Watchlist", "symbols": [(s, "") for s in extra]})
     every = list(dict.fromkeys(s for g in groups for s, _ in g["symbols"]))
-    # Alpaca streams 30 stocks live: the watchlist first, then the index ETFs (SPY, VOO, QQQ) and the busiest names.
+    # Live streams: the watchlist first, then the index ETFs (SPY, VOO, QQQ) and the busiest names.
+    # Alpaca streams the first 30, Finnhub the next 50: together every stock on the ribbons.
     by_id = {g["id"]: [s for s, _ in g["symbols"]] for g in groups}
-    alpaca.stocks.set_wanted([*(extra or []), "SPY", "VOO", "QQQ", *by_id["hot"], *by_id["megacap"], *by_id["etfs"]])
+    assign_streams([*(extra or []), "SPY", "VOO", "QQQ", *by_id["hot"], *by_id["megacap"], *by_id["etfs"]])
     found, live = quotes(every)
     by_sym = {q["symbol"]: q for q in found}
     out = []

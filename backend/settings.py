@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV = ROOT / ".env"
-EDITABLE = {"ALPACA_KEY_ID", "ALPACA_SECRET_KEY"}  # only these can be changed from the app
+EDITABLE = {"ALPACA_KEY_ID", "ALPACA_SECRET_KEY", "FINNHUB_API_KEY"}  # only these can be changed from the app
 
 
 def save(values: dict[str, str]) -> None:
@@ -13,7 +13,7 @@ def save(values: dict[str, str]) -> None:
     values = {k: v.strip() for k, v in values.items() if k in EDITABLE}
     for k, v in values.items():
         if not re.fullmatch(r"[A-Za-z0-9_\-+/=.]{0,200}", v):
-            raise ValueError("That key has characters keys never contain. Copy it again from Alpaca.")
+            raise ValueError("That key has characters keys never contain. Copy it again.")
     source = ENV if ENV.is_file() else ROOT / ".env.example"
     lines = source.read_text(encoding="utf-8").splitlines() if source.is_file() else []
     done = set()

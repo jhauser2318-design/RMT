@@ -17,7 +17,7 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, fetch, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, fetch, finnhub, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -57,9 +57,10 @@ async def start_streams():
     if not fetch.demo_mode():
         stream.crypto.start()
         alpaca.stocks.start()
+        finnhub.stocks.start()
 
 
-LIVE = [stream.crypto, alpaca.stocks]
+LIVE = [stream.crypto, alpaca.stocks, finnhub.stocks]
 
 
 @app.get("/api/stream/status")
@@ -110,7 +111,30 @@ def save_alpaca_keys(body: AlpacaKeysIn):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     fetch.forget("alpaca:")
+    markets.assign_streams()
     alpaca.stocks.keys_changed()
+    return {"ok": True, "message": message}
+
+
+class FinnhubKeyIn(BaseModel):
+    key: str
+
+
+@app.post("/api/settings/finnhub")
+def save_finnhub_key(body: FinnhubKeyIn):
+    """Test the key; if it works, save it in .env and start streaming with it."""
+    before = finnhub.key()
+    os.environ["FINNHUB_API_KEY"] = body.key.strip()
+    ok, message = finnhub.test_key()
+    if not ok:
+        os.environ["FINNHUB_API_KEY"] = before
+        raise HTTPException(status_code=400, detail=message)
+    try:
+        settings.save({"FINNHUB_API_KEY": body.key})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    markets.assign_streams()
+    finnhub.stocks.keys_changed()
     return {"ok": True, "message": message}
 
 
@@ -205,7 +229,7 @@ def stock_info(symbol: str):
         raise HTTPException(status_code=404, detail=str(e))
     sym = info["symbol"]
     stream.crypto.want([sym])
-    alpaca.stocks.set_focus(sym)  # stream it live while its page is open
+    markets.focus(sym)  # stream it live while its page is open
     found, live = markets.quotes([sym])
     info["quote"] = found[0] if found else None
     info["live"] = live
@@ -224,7 +248,7 @@ def stock_chart(symbol: str, range: str = "1d"):  # noqa: A002 (matches the page
 @app.post("/api/stock/close")
 def stock_close():
     """The stock's page was closed: stop giving it a live-stream slot."""
-    alpaca.stocks.set_focus(None)
+    markets.focus(None)
     return {"ok": True}
 
 
