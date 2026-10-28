@@ -10,10 +10,11 @@ console window). It:
   3. the server shuts itself down a few minutes after you close the window
      (the open window checks in every 15 seconds; when that stops, it's closed).
 
-Updates never happen by themselves: click "Update" inside the app when you
-want the newest version (see updater.py). After an update the app runs
-"launcher.pyw --restart", which restarts the server without opening a
-second window; the window that's already open reloads itself.
+Updates, like Life Control Center: every time you open RMT it checks GitHub
+and installs a newer version first, if there is one (see updater.py). You can
+turn that off under ⚙ → Updates, and update with the "Update now" button
+instead. After an update "launcher.pyw --restart" starts the new version
+without opening a second window; the window that's already open switches to it.
 
 If something goes wrong, details are written to data/app.log.
 (start.bat still works too, and shows the server's messages in a window.)
@@ -111,6 +112,34 @@ def start_server() -> subprocess.Popen:
     )
 
 
+def install_update() -> bool:
+    """Automatic updates (on unless turned off in ⚙): install a newer version before starting."""
+    try:
+        sys.path.insert(0, str(ROOT))
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(ROOT / ".env")  # GITHUB_TOKEN, if the repository is private
+        except ImportError:
+            pass
+        import updater
+        if not updater.auto_enabled():
+            return False
+        result = updater.update()
+    except Exception as e:  # noqa: BLE001 (never let an update problem stop RMT from opening)
+        logging.warning("Automatic update skipped: %s", e)
+        return False
+    if result.get("error"):
+        logging.info("Automatic update skipped: %s", result["error"])
+    return bool(result.get("updated"))
+
+
+def restart() -> None:
+    python = Path(sys.executable).with_name("pythonw.exe")
+    subprocess.Popen([str(python if python.is_file() else sys.executable), str(ROOT / "launcher.pyw"), "--restart"],
+                     cwd=ROOT, creationflags=(0x00000008 | 0x00000200) if os.name == "nt" else 0,
+                     start_new_session=os.name != "nt")
+
+
 def main() -> None:
     DATA.mkdir(exist_ok=True)
     logging.basicConfig(filename=LOG, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -130,6 +159,10 @@ def main() -> None:
 
     if not RESTART:
         open_window(SPLASH.as_uri() if SPLASH.is_file() else URL)
+        if install_update():  # a new version is in place: let its own launcher start it
+            lock.close()
+            restart()
+            return
     logging.info("Starting RMT")
     proc = start_server()
     if not wait_until(lambda: server_info() is not None or proc.poll() is not None, 90) or proc.poll() is not None:

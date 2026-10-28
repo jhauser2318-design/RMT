@@ -673,6 +673,25 @@ $("#settings-open").addEventListener("click", () => {
   if (!$("#settings").hidden) { showVersion(); checkUpdate(); }
 });
 $("#update-check").addEventListener("click", () => checkUpdate());
+api("/app/auto-update").then((r) => { $("#auto-update").checked = r.on; }).catch(() => {});
+$("#auto-update").addEventListener("change", async () => {
+  try { $("#auto-update").checked = (await api("/app/auto-update", { on: $("#auto-update").checked })).on; }
+  catch (e) { $("#auto-update").checked = !$("#auto-update").checked; }
+});
+
+// Right after an update: say what's new, once.
+function toast(html, ms = 9000) {
+  const t = $("#toast");
+  t.innerHTML = html;
+  t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, ms);
+}
+api("/app/info").then((info) => {
+  const seen = store.get("seenVersion", null);
+  if (info.version && seen && seen !== info.version) toast(`✨ <b>RMT was updated:</b> ${esc(info.summary || "latest version")}`);
+  if (info.version) store.set("seenVersion", info.version);
+}).catch(() => {});
 document.addEventListener("click", (e) => {
   if (e.target.id === "update-now") installUpdate();
   else if (!$("#settings").hidden && !e.target.closest("#settings, #settings-open")) $("#settings").hidden = true;

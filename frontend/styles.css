@@ -74,6 +74,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .settings { max-height: calc(100vh - 80px); overflow-y: auto; }
 .source { display: flex; flex-direction: column; gap: 1px; }
 .source .muted { margin: 0; }
+.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; cursor: pointer; }
+.check input { accent-color: var(--green); width: 16px; height: 16px; }
+.toast {
+  position: fixed; z-index: 50; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: min(560px, 92vw);
+  background: #0d1c14; border: 1px solid var(--green); border-radius: 12px; padding: 12px 16px; box-shadow: var(--shadow);
+}
 .update-new { border: 1px solid var(--green); border-radius: 10px; padding: 10px; margin: 8px 0; background: rgba(34, 224, 107, .08); }
 .update-new p { margin: 0 0 8px; }
 .badge { font-size: 11px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }

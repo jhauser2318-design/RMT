@@ -264,6 +264,47 @@ def test_update_installs_new_version_and_keeps_keys():
             updater.ROOT, updater.VERSION_FILE, updater._get = real
 
 
+def test_automatic_updates_switch_and_launcher():
+    import importlib.machinery
+    import importlib.util
+    import tempfile
+    import types
+    import updater
+    with tempfile.TemporaryDirectory() as tmp:
+        real = updater.SETTINGS_FILE
+        updater.SETTINGS_FILE = Path(tmp) / "data" / "settings.json"
+        try:
+            assert updater.auto_enabled()  # on by default, like Life Control Center
+            updater.set_auto(False)
+            assert not updater.auto_enabled()
+            updater.set_auto(True)
+            assert updater.auto_enabled() and json.loads(updater.SETTINGS_FILE.read_text()) == {"auto_update": True}
+        finally:
+            updater.SETTINGS_FILE = real
+
+    # The launcher installs an update before starting, but an update problem never stops RMT opening.
+    path = str(Path(__file__).resolve().parent.parent / "launcher.pyw")
+    spec = importlib.util.spec_from_loader("launcher", importlib.machinery.SourceFileLoader("launcher", path))
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+    fake = types.ModuleType("updater")
+    real_updater = sys.modules["updater"]
+    sys.modules["updater"] = fake
+    try:
+        fake.auto_enabled = lambda: True
+        fake.update = lambda: {"updated": True, "error": None}
+        assert launcher.install_update() is True
+        fake.update = lambda: {"updated": False, "error": "offline"}
+        assert launcher.install_update() is False
+        fake.update = lambda: 1 / 0
+        assert launcher.install_update() is False
+        fake.auto_enabled = lambda: False
+        fake.update = lambda: (_ for _ in ()).throw(AssertionError("must not update when switched off"))
+        assert launcher.install_update() is False
+    finally:
+        sys.modules["updater"] = real_updater
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

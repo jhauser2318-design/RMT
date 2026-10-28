@@ -40,7 +40,7 @@ It uses RMT's live prices, headlines, games and odds, and searches the web for s
 
 ### Keeping it up to date
 - **Data:** the **⟳** button at the top refreshes everything right now. Next to it, **Auto** sets how often prices, scores and odds update by themselves: off, 15 seconds, 30 seconds, 1 minute or 5 minutes.
-- **New versions of RMT:** a dot on the **⚙** icon means a new version is ready. Click ⚙, then **Update now**. RMT never updates by itself, and your keys are never touched.
+- **New versions of RMT install themselves**, like Life Control Center: every time you open RMT it checks for a newer version and installs it first (a quick "✨ RMT was updated" note tells you what changed). You never need to download it again. To turn this off, click **⚙** and untick **Update automatically when RMT opens**; then a dot on ⚙ tells you when an update is ready and **Update now** installs it. Your keys are never touched.
 
 *(Mac / Linux, or to see the server's messages: run `./start.sh` or `start.bat`, then open http://localhost:8050.)*
 
