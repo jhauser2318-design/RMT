@@ -16,6 +16,9 @@ async function api(path, body, method = body ? "POST" : "GET") {
   });
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
+  if (res.status === 405) {  // an older RMT is still running behind this newer window
+    throw new Error("RMT needs a restart to finish updating: close every RMT window, wait a few seconds, and open RMT again.");
+  }
   if (!res.ok) throw new Error(data?.detail || `Request failed (${res.status})`);
   return data;
 }

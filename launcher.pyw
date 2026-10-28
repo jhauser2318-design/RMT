@@ -112,6 +112,27 @@ def start_server() -> subprocess.Popen:
     )
 
 
+def is_current(info: dict) -> bool:
+    """Is the running server the same code as the files on disk?"""
+    try:
+        sys.path.insert(0, str(ROOT))
+        import updater
+        return info.get("code") == updater.code_fingerprint(ROOT)
+    except Exception:  # noqa: BLE001 (can't tell: assume it's fine rather than stop it)
+        return True
+
+
+def stop_server(info: dict) -> None:
+    pid = info.get("pid")
+    if not pid:
+        return
+    try:
+        import signal
+        os.kill(int(pid), signal.SIGTERM)  # on Windows this ends the process
+    except Exception as e:  # noqa: BLE001
+        logging.warning("Couldn't stop the old RMT (pid %s): %s", pid, e)
+
+
 def install_update() -> bool:
     """Automatic updates (on unless turned off in ⚙): install a newer version before starting."""
     try:
@@ -144,11 +165,20 @@ def main() -> None:
     DATA.mkdir(exist_ok=True)
     logging.basicConfig(filename=LOG, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
+    info = server_info()
     if RESTART:  # after an update: wait for the old server to stop, start the new one
         wait_until(lambda: server_info() is None, 20)
-    elif server_info():  # already running: just open another window
-        open_window(URL)
-        return
+    elif info:
+        if is_current(info):  # already running this version: just open another window
+            open_window(URL)
+            return
+        # An older RMT is still running (e.g. after reinstalling): stop it and start the new one.
+        logging.info("Stopping an older RMT that's still running (pid %s)", info.get("pid"))
+        stop_server(info)
+        if not wait_until(lambda: server_info() is None, 15):
+            show_error("An older copy of RMT is still running and couldn't be stopped.\n\n"
+                       "Restart your computer, then open RMT again.")
+            return
 
     lock = take_lock()
     if lock is None:  # another click is already starting RMT

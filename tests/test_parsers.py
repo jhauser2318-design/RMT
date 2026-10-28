@@ -377,6 +377,53 @@ def test_update_works_around_files_windows_wont_overwrite():
             updater.ROOT, updater.VERSION_FILE, updater._get, updater.shutil.copy2 = saved
 
 
+def test_launcher_replaces_an_older_rmt_still_running():
+    """The real failure: after reinstalling, the old server kept running and new buttons said "Method Not Allowed"."""
+    import importlib.machinery
+    import importlib.util
+    import updater
+    path = str(Path(__file__).resolve().parent.parent / "launcher.pyw")
+    spec = importlib.util.spec_from_loader("launcher_t", importlib.machinery.SourceFileLoader("launcher_t", path))
+    la = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(la)
+    current = updater.code_fingerprint()
+    assert la.is_current({"code": current}) and not la.is_current({"code": "old"}) and not la.is_current({})
+
+    events, running = [], {"info": {"pid": 4242, "code": "old"}}
+    la.server_info = lambda: running["info"]
+    la.open_window = lambda target: events.append(("window", target))
+    la.stop_server = lambda info: (events.append(("stop", info["pid"])), running.update(info=None))
+    la.take_lock = lambda: type("Lock", (), {"close": lambda self: None})()
+    la.install_update = lambda: False
+    la.wait_until = lambda check, seconds: check() or True
+
+    class Proc:
+        def poll(self):
+            return None
+    la.start_server = lambda: (events.append(("start",)), running.update(info={"pid": 1, "code": current}), Proc())[2]
+    la.main()
+    assert events[0] == ("stop", 4242) and ("start",) in events, events  # old one stopped, new one started
+
+    events.clear()
+    la.main()  # now the current version is running: just open a window
+    assert events == [("window", la.URL)], events
+
+
+def test_unknown_api_says_restart_not_method_not_allowed():
+    from fastapi import HTTPException
+    from backend import main
+    try:
+        main.unknown_api("settings/something-new")
+    except HTTPException as e:
+        assert e.status_code == 404 and "open RMT again" in e.detail
+    else:
+        raise AssertionError("expected a friendly error")
+    paths = [getattr(r, "path", "") for r in main.app.routes]
+    catch_all = paths.index("/api/{rest:path}")
+    assert catch_all > paths.index("/api/settings/finnhub") and catch_all > paths.index("/api/chat")  # real routes win
+    assert main.app_info()["code"] == main.CODE
+
+
 def test_automatic_updates_switch_and_launcher():
     import importlib.machinery
     import importlib.util
