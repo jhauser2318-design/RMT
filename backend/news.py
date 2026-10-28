@@ -7,11 +7,13 @@ site redesigns its pages. Sources that can't be reached are skipped.
 import html
 import os
 import re
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 from . import demo
-from .fetch import cached, demo_mode, get_json, get, parse_feed
+from .fetch import _when as fetch_when
+from .fetch import cached, demo_mode, get, get_json, parse_feed
 
 NEWS_FEEDS = [
     ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
@@ -26,17 +28,34 @@ NEWS_FEEDS = [
 
 SUBREDDITS = ["wallstreetbets", "stocks", "investing", "options", "Daytrading", "StockMarket"]
 
-# Popular finance / trading channels. Edit freely: the id is the part after
-# /channel/ in a channel's address.
-YOUTUBE_CHANNELS = [
-    ("CNBC Television", "UCrp_UI8XtuYfpiqluWLD7Lw"),
-    ("Bloomberg Television", "UCIALMKvObZNtJ6AmdCLP7Lg"),
-    ("Yahoo Finance", "UCEAZeUIeJs0IjQiqTCdVSIg"),
-    ("Wall Street Journal", "UCK7tptUDHh-RYDsdxO1-5QQ"),
-    ("Graham Stephan", "UCV6KDgJskWaEckne5aPA0aQ"),
-    ("Meet Kevin", "UCUvvj5lwue7PspotMDjk5UA"),
-    ("Andrei Jikh", "UCGy7SkBjcIAgTiwkXEtPnYg"),
-]
+# YouTube channels, by tab. Edit freely: the id is the part after /channel/ in a
+# channel's address. "Popular" ranks the investing and day-trading channels'
+# videos from the last week by views.
+YOUTUBE_CHANNELS = {
+    "investing": [
+        ("Graham Stephan", "UCV6KDgJskWaEckne5aPA0aQ"),
+        ("Andrei Jikh", "UCGy7SkBjcIAgTiwkXEtPnYg"),
+        ("Humphrey Yang", "UCFBpVaKCC0ajGps1vf0AgBg"),
+        ("Minority Mindset", "UCT3EznhW_CNFcfOlyDNTLLw"),
+        ("Financial Education", "UCnMn36GT_H0X-w5_ckLtlgQ"),
+        ("Ticker Symbol: YOU", "UC7kCeZ53sli_9XwuQeFxLqw"),
+        ("Meet Kevin", "UCUvvj5lwue7PspotMDjk5UA"),
+    ],
+    "trading": [
+        ("Ross Cameron - Warrior Trading", "UCBayuhgYpKNbhJxfExYkPfA"),
+        ("Humbled Trader", "UCcIvNGMBSQWwo1v3n-ZRBCw"),
+        ("Meet Kevin", "UCUvvj5lwue7PspotMDjk5UA"),
+    ],
+    "news": [
+        ("CNBC Television", "UCrp_UI8XtuYfpiqluWLD7Lw"),
+        ("Bloomberg Television", "UCIALMKvObZNtJ6AmdCLP7Lg"),
+        ("Yahoo Finance", "UCEAZeUIeJs0IjQiqTCdVSIg"),
+        ("Wall Street Journal", "UCK7tptUDHh-RYDsdxO1-5QQ"),
+    ],
+}
+POPULAR_DAYS = 7
+# With a YOUTUBE_API_KEY, "Popular" also searches all of YouTube for these, most viewed this week.
+POPULAR_SEARCH = "stock market investing advice"
 
 _TAG = re.compile(r"<[^>]+>")
 
@@ -116,11 +135,17 @@ def trading_talk(sort: str = "hot") -> dict:
     return {"live": True, "items": items} if items else {"live": False, "items": demo.reddit()}
 
 
-def _yt_search(query: str, key: str) -> list[dict]:
-    data = get_json("https://www.googleapis.com/youtube/v3/search", {
-        "part": "snippet", "q": query, "type": "video", "maxResults": 24,
-        "order": "relevance", "relevanceLanguage": "en", "key": key,
-    })
+def _yt_get(path: str, params: dict, key: str) -> dict:
+    return get_json(f"https://www.googleapis.com/youtube/v3/{path}", {**params, "key": key})
+
+
+def _yt_search(query: str, key: str, popular: bool = False) -> list[dict]:
+    params = {"part": "snippet", "q": query, "type": "video", "maxResults": 24, "relevanceLanguage": "en",
+              "order": "viewCount" if popular else "relevance"}
+    if popular:
+        since = time.gmtime(time.time() - POPULAR_DAYS * 86400)
+        params["publishedAfter"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", since)
+    data = _yt_get("search", params, key)
     out = []
     for it in data.get("items", []):
         sn = it["snippet"]
@@ -128,26 +153,54 @@ def _yt_search(query: str, key: str) -> list[dict]:
         out.append({"title": _clean(sn["title"]), "link": f"https://www.youtube.com/watch?v={vid}",
                     "video_id": vid, "source": sn["channelTitle"],
                     "image": sn["thumbnails"].get("medium", {}).get("url", ""),
-                    "time": 0, "published": sn.get("publishedAt", "")})
+                    "time": fetch_when(sn.get("publishedAt", "")), "views": None})
+    if out:  # view counts: one cheap extra request for all of them
+        stats = _yt_get("videos", {"part": "statistics", "id": ",".join(v["video_id"] for v in out)}, key)
+        views = {v["id"]: int(v.get("statistics", {}).get("viewCount", 0)) for v in stats.get("items", [])}
+        for v in out:
+            v["views"] = views.get(v["video_id"])
     return out
 
 
-def youtube(query: str = "") -> dict:
-    """Latest videos from popular finance channels, or a search (needs a key)."""
+def _channel_videos(tab: str) -> list[dict]:
+    if tab == "popular":
+        channels = list(dict.fromkeys(YOUTUBE_CHANNELS["investing"] + YOUTUBE_CHANNELS["trading"]))
+    else:
+        channels = YOUTUBE_CHANNELS.get(tab, YOUTUBE_CHANNELS["investing"])
+    return _many([(n, f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}") for n, cid in channels])
+
+
+def youtube(query: str = "", tab: str = "popular") -> dict:
+    """Videos for a tab: "popular" (most-viewed advice this week), "investing", "trading" or "news".
+    A query filters them by title, or searches all of YouTube with a YOUTUBE_API_KEY."""
     if demo_mode():
         return {"live": False, "items": demo.videos(), "searchable": False}
     key = os.getenv("YOUTUBE_API_KEY", "").strip()
+    tab = tab if tab in ("popular", "investing", "trading", "news") else "popular"
     if query and key:
         try:
-            items = cached(f"yt:{query.lower()}", 900, lambda: _yt_search(query, key))
+            items = cached(f"yt:{query.lower()}", 900, lambda: _yt_search(f"{query} stock", key))
             return {"live": True, "items": items, "searchable": True}
         except Exception:  # noqa: BLE001 (fall back to the channel feeds)
             pass
-    feeds = [(n, f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}") for n, cid in YOUTUBE_CHANNELS]
-    items = _many(feeds)
-    if query:
+    if query:  # look in every tab's channels
+        items = [i for t in YOUTUBE_CHANNELS for i in _channel_videos(t)]
         words = query.lower().split()
         items = [i for i in items if all(w in i["title"].lower() for w in words)]
+        items = list({i["link"]: i for i in items}.values())
+        items.sort(key=lambda i: -i["time"])
+    elif tab == "popular":
+        week_ago = time.time() - POPULAR_DAYS * 86400
+        items = [i for i in _channel_videos("popular") if i["time"] >= week_ago and i.get("views")]
+        if key:
+            try:
+                items += cached("yt:popular", 3600, lambda: _yt_search(POPULAR_SEARCH, key, popular=True))
+            except Exception:  # noqa: BLE001 (the channel feeds still work)
+                pass
+        items = list({i["link"]: i for i in items}.values())
+        items.sort(key=lambda i: -(i.get("views") or 0))
+    else:
+        items = _channel_videos(tab)
     items = items[:36]
     for i in items:
         if i.get("video_id") and not i.get("image"):

@@ -27,7 +27,7 @@ RIBBONS = [
         ("SOFI", ""), ("RIVN", ""), ("GME", ""), ("AMC", ""), ("MARA", ""), ("RIOT", ""),
         ("NIO", ""), ("ARM", ""), ("RDDT", ""), ("IONQ", "")]},
     {"id": "etfs", "name": "ETFs", "symbols": [
-        ("SPY", ""), ("QQQ", ""), ("IWM", ""), ("DIA", ""), ("TQQQ", ""), ("SQQQ", ""),
+        ("SPY", ""), ("VOO", ""), ("QQQ", ""), ("IWM", ""), ("DIA", ""), ("TQQQ", ""), ("SQQQ", ""),
         ("SOXL", ""), ("ARKK", ""), ("XLF", ""), ("XLE", ""), ("TLT", ""), ("GLD", "")]},
     {"id": "crypto", "name": "Crypto", "symbols": [
         ("BTC-USD", "Bitcoin"), ("ETH-USD", "Ethereum"), ("SOL-USD", "Solana"),
@@ -105,9 +105,9 @@ def ribbons(extra: list[str] | None = None) -> dict:
     if extra:
         groups.insert(0, {"id": "watch", "name": "My Watchlist", "symbols": [(s, "") for s in extra]})
     every = list(dict.fromkeys(s for g in groups for s, _ in g["symbols"]))
-    # Alpaca streams 30 stocks live: the watchlist first, then the index ETFs and the busiest names.
+    # Alpaca streams 30 stocks live: the watchlist first, then the index ETFs (SPY, VOO, QQQ) and the busiest names.
     by_id = {g["id"]: [s for s, _ in g["symbols"]] for g in groups}
-    alpaca.stocks.set_wanted([*(extra or []), "SPY", "QQQ", *by_id["hot"], *by_id["megacap"], *by_id["etfs"]])
+    alpaca.stocks.set_wanted([*(extra or []), "SPY", "VOO", "QQQ", *by_id["hot"], *by_id["megacap"], *by_id["etfs"]])
     found, live = quotes(every)
     by_sym = {q["symbol"]: q for q in found}
     out = []

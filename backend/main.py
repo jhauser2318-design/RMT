@@ -202,8 +202,8 @@ def get_talk(sort: str = "hot"):
 
 
 @app.get("/api/markets/videos")
-def get_videos(q: str = ""):
-    return news.youtube(q)
+def get_videos(q: str = "", tab: str = "popular"):
+    return news.youtube(q, tab)
 
 
 @app.get("/api/sports/leagues")

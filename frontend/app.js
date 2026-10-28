@@ -128,18 +128,28 @@ async function loadTalk() {
   } catch (e) { list.innerHTML = `<li class="empty">${esc(e.message)}</li>`; }
 }
 
+let ytTab = store.get("ytTab", "popular");
+
+function fmtViews(n) {
+  if (n == null) return "";
+  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M views`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}K views`;
+  return `${n} views`;
+}
+
 async function loadVideos(q = tickerFilter) {
+  $$("#yt-tabs .chip").forEach((c) => c.classList.toggle("active", !q && c.dataset.ytTab === ytTab));
   const box = $("#videos");
   box.innerHTML = `<div class="empty">Loading videos…</div>`;
   $("#yt-filter").hidden = !q;
   $("#yt-filter").innerHTML = `Videos for <b>${esc(q)}</b> <button data-clear="yt">✕ show latest</button>
     · <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} stock`)}" target="_blank" rel="noopener">search on YouTube ↗</a>`;
   try {
-    const data = await api(`/markets/videos?q=${encodeURIComponent(q)}`);
+    const data = await api(`/markets/videos?q=${encodeURIComponent(q)}&tab=${ytTab}`);
     box.innerHTML = data.items.map((v) => `<a class="video" href="${esc(v.link)}" target="_blank" rel="noopener">
       <div class="thumb" style="${v.image ? `background-image:url('${esc(v.image)}')` : ""}">${v.image ? "" : "▶"}</div>
       <div class="vt">${esc(v.title)}</div>
-      <div class="vm">${esc(v.source)}${v.time ? ` · ${timeAgo(v.time)}` : ""}</div></a>`).join("")
+      <div class="vm">${esc(v.source)}${v.views != null ? ` · <span class="views">${fmtViews(v.views)}</span>` : ""}${v.time ? ` · ${timeAgo(v.time)}` : ""}</div></a>`).join("")
       || `<div class="empty">No matching videos from the followed channels.${data.searchable ? "" : " Add a YOUTUBE_API_KEY to search all of YouTube."}</div>`;
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -426,6 +436,14 @@ function showMode() {
 }
 
 document.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-yt-tab]");
+  if (tab) {
+    ytTab = tab.dataset.ytTab;
+    store.set("ytTab", ytTab);
+    $("#yt-q").value = "";
+    loadVideos("");
+    return;
+  }
   const t = e.target.closest("[data-mode],[data-sym],[data-unwatch],[data-clear],[data-league],[data-books],[data-ask-game],[data-jump],[data-suggest]");
   if (!t) return;
   const d = t.dataset;

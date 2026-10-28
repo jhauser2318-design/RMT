@@ -71,7 +71,8 @@ ATOM = b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom" xmlns:
  xmlns:media="http://search.yahoo.com/mrss/"><entry><yt:videoId>abc123</yt:videoId><title>Market close: NVDA rips</title>
 <link rel="alternate" href="https://www.youtube.com/watch?v=abc123"/><author><name>CNBC Television</name></author>
 <published>2026-10-23T20:00:00+00:00</published><media:group><media:thumbnail url="https://i.ytimg.com/vi/abc123/hq.jpg"/>
-<media:description>Recap</media:description></media:group></entry></feed>"""
+<media:description>Recap</media:description><media:community><media:starRating count="10" average="5.00" min="1" max="5"/>
+<media:statistics views="123456"/></media:community></media:group></entry></feed>"""
 
 
 def fake_get_json(url, params=None, timeout=10):
@@ -151,6 +152,7 @@ def test_feeds():
     assert rss[1]["image"] == ""
     atom = fetch.parse_feed(ATOM)
     assert atom[0]["video_id"] == "abc123" and atom[0]["source"] == "CNBC Television"
+    assert atom[0]["views"] == 123456
     assert atom[0]["link"].endswith("abc123") and atom[0]["image"].endswith("hq.jpg") and atom[0]["time"] > 0
 
     reset()
@@ -158,6 +160,35 @@ def test_feeds():
     res = news.headlines()
     assert res["live"] and [i["title"] for i in res["items"]] == ["Stocks & bonds rally", "Older story"]  # deduped across feeds
     assert res["items"][0]["summary"] == "Big day"  # HTML stripped
+
+
+def test_youtube_popular_advice_ranked_by_views():
+    import time as _t
+    now = _t.time()
+
+    def feed(cid):
+        def entry(vid, title, days, views):
+            stamp = _t.strftime("%Y-%m-%dT%H:%M:%S+00:00", _t.gmtime(now - days * 86400))
+            return f"""<entry><yt:videoId>{vid}</yt:videoId><title>{title}</title>
+<link rel="alternate" href="https://www.youtube.com/watch?v={vid}"/><author><name>{cid}</name></author>
+<published>{stamp}</published><media:group><media:community><media:statistics views="{views}"/></media:community></media:group></entry>"""
+        entries = {
+            "UCV6KDgJskWaEckne5aPA0aQ": entry("g1", "Buy these 3 stocks", 2, 900000) + entry("g0", "Old video", 30, 9000000),
+            "UCBayuhgYpKNbhJxfExYkPfA": entry("r1", "Small cap momentum setup", 1, 250000),
+            "UCrp_UI8XtuYfpiqluWLD7Lw": entry("c1", "Market close", 0.5, 5000000),
+        }.get(cid, "")
+        return f"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+ xmlns:media="http://search.yahoo.com/mrss/">{entries}</feed>""".encode()
+
+    reset()
+    news.get = lambda url, *a, **k: feed(url.split("channel_id=")[1])
+    os.environ["YOUTUBE_API_KEY"] = ""
+    popular = news.youtube(tab="popular")
+    assert [v["video_id"] for v in popular["items"]] == ["g1", "r1"], popular  # last week only, most viewed first
+    assert popular["items"][0]["views"] == 900000 and popular["items"][0]["image"].endswith("g1/mqdefault.jpg")
+    assert [v["video_id"] for v in news.youtube(tab="news")["items"]] == ["c1"]  # market news is its own tab
+    assert [v["video_id"] for v in news.youtube(tab="trading")["items"]] == ["r1"]
+    assert [v["video_id"] for v in news.youtube("momentum")["items"]] == ["r1"]  # a search looks in every tab
 
 
 def test_falls_back_to_sample_data_when_offline():

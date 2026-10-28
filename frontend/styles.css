@@ -174,6 +174,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .feed .src { color: var(--green); font-weight: 600; }
 .feed .flair { color: var(--gold); }
 .feed .summary { color: var(--muted); font-size: 12.5px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yt-tabs { margin-bottom: 10px; }
+.yt-tabs .chip { font-size: 12px; padding: 4px 9px; }
+.vm .views { color: var(--lime); font-weight: 600; }
 .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 72vh; overflow-y: auto; }
 .video { display: block; border-radius: 10px; overflow: hidden; background: var(--bg2); border: 1px solid var(--line); }
 .video:hover { border-color: var(--green); }
