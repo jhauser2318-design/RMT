@@ -203,17 +203,72 @@ function localTime(iso) {
   return `${sameDay ? "Today" : d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }
 
-function teamRow(t, ml, best, lost) {
+/* ---------- pretend bets: every price you can tap ---------- */
+
+// Picks are kept in a registry so the buttons only carry a short key.
+const PICKS = new Map();
+function pickKey(p) { return [p.game_id, p.market, p.side, p.player || "", p.point ?? "", p.book || ""].join("|"); }
+function pickAttr(p) {
+  if (!p || p.price == null) return "";
+  const k = pickKey(p);
+  PICKS.set(k, p);
+  return `data-pick="${esc(k)}"${slip.legs.some((l) => pickKey(l) === k) ? ' aria-pressed="true"' : ""}`;
+}
+
+function gameBase(g) {
+  return { game_id: g.id, league: g.league, game: `${g.away.abbr || g.away.short} @ ${g.home.abbr || g.home.short}`, start: g.start };
+}
+
+// The main lines for a game: moneyline, spread and total for each side, best price when we have many books.
+function mainPicks(g) {
+  const o = g.odds || {}, best = g.best || {}, books = g.books || [], base = gameBase(g);
+  const name = (side) => g[side].abbr || g[side].short || g[side].name;
+  const out = {};
+  for (const side of ["away", "home"]) {
+    const price = best[`${side}_ml`]?.price ?? o[`${side}_ml`];
+    if (price != null) out[`ml_${side}`] = { ...base, market: "ml", side, price, point: null,
+      book: best[`${side}_ml`]?.book || o.provider || "", label: `${name(side)} moneyline` };
+    const sb = best[`${side}_spread_price`];
+    const row = sb && books.find((r) => r[`${side}_spread_price`] === sb.price && r[`${side}_spread`] != null);
+    let point = row ? row[`${side}_spread`] : null, sp = sb?.price ?? null, book = sb?.book || "";
+    if (point == null && o.spread) {  // ESPN's line, e.g. "KC -2.5" (priced at the standard -110)
+      const m = /^(\S+)\s+([+-]?\d+(?:\.\d+)?)$/.exec(o.spread.trim());
+      if (m) {
+        const fav = m[1].toUpperCase(), n = Number(m[2]);
+        const favSide = fav === (g.home.abbr || "").toUpperCase() ? "home" : fav === (g.away.abbr || "").toUpperCase() ? "away" : null;
+        if (favSide) { point = side === favSide ? n : -n; sp = -110; book = o.provider || ""; }
+      }
+    }
+    if (point != null && sp != null) out[`spread_${side}`] = { ...base, market: "spread", side, price: sp, point,
+      book, label: `${name(side)} ${pt(point)}`, line_key: "spread" };
+  }
+  for (const side of ["over", "under"]) {
+    const tb = best[`${side}_price`];
+    const row = tb && books.find((r) => r[`${side}_price`] === tb.price && r.total != null);
+    const point = row ? row.total : o.total;
+    const price = tb?.price ?? (o.total != null ? -110 : null);
+    if (point != null && price != null) out[`total_${side}`] = { ...base, market: "total", side, price, point,
+      book: tb?.book || o.provider || "", label: `${side === "over" ? "Over" : "Under"} ${point}`, line_key: "total" };
+  }
+  return out;
+}
+
+function teamRow(t, ml, best, lost, pick) {
   const logo = t.logo ? `<img class="team-logo" src="${esc(t.logo)}" alt="" loading="lazy">` : `<span class="team-logo ph">${esc((t.abbr || t.name).slice(0, 3))}</span>`;
   return `<div class="team-row ${lost ? "loser" : ""}">${logo}
     <span class="team-name">${esc(t.name)}<small>${esc(t.record)}</small></span>
     <span class="score">${esc(t.score)}</span>
-    <span class="ml ${best ? "best" : ""}" title="Moneyline${best ? ` · best at ${esc(best)}` : ""}">${oddsFmt(ml)}</span></div>`;
+    <button class="ml ${best ? "best" : ""}" ${pickAttr(pick)} title="Moneyline${best ? ` · best at ${esc(best)}` : ""} · tap to add to your bet slip">${oddsFmt(ml)}</button></div>`;
 }
 
 function booksTable(g) {
   const b = g.best || {};
-  const cell = (row, k, extra = "") => `<td class="${b[k] && b[k].price === row[k] ? "best" : ""}">${extra}${oddsFmt(row[k])}</td>`;
+  const cell = (row, k, extra = "") => {
+    const side = k.startsWith("home") ? "home" : "away";
+    const pick = row[k] != null && g.state !== "post" ? { ...gameBase(g), market: "ml", side, price: row[k], point: null, book: row.book,
+      label: `${g[side].abbr || g[side].short} moneyline` } : null;
+    return `<td class="${b[k] && b[k].price === row[k] ? "best" : ""}">${pick ? `<button class="cell-pick" ${pickAttr(pick)}>${extra}${oddsFmt(row[k])}</button>` : `${extra}${oddsFmt(row[k])}`}</td>`;
+  };
   const home = esc(g.home.abbr || "Home"), away = esc(g.away.abbr || "Away");
   return `<div class="books-wrap"><table class="books"><thead><tr><th>Book</th><th>${away}</th><th>${home}</th><th>${home} spread</th><th>Total</th></tr></thead><tbody>
     ${g.books.map((r) => `<tr><td>${esc(r.book)}</td>${cell(r, "away_ml")}${cell(r, "home_ml")}
@@ -233,14 +288,19 @@ function gameCard(g) {
   const b0 = g.books?.[0];
   const spread = o.spread || (b0?.home_spread != null ? `${g.home.abbr || g.home.short} ${pt(b0.home_spread)}` : "");
   const total = o.total ?? b0?.total;
+  const picks = g.state === "post" ? {} : mainPicks(g);  // finished games can't be bet
   return `<div class="game ${g.state === "in" ? "is-live" : ""}" data-id="${esc(g.id)}">
     <div class="game-top"><span>${g.emoji} ${esc(g.league_name)}${g.broadcast ? ` · ${esc(g.broadcast)}` : ""}</span>
       <span class="status ${g.state === "in" ? "live" : ""}">${esc(status)}</span></div>
-    ${teamRow(g.away, awayMl, best.away_ml?.book, lostAway)}
-    ${teamRow(g.home, homeMl, best.home_ml?.book, lostHome)}
+    ${teamRow(g.away, awayMl, best.away_ml?.book, lostAway, picks.ml_away)}
+    ${teamRow(g.home, homeMl, best.home_ml?.book, lostHome, picks.ml_home)}
     <div class="line-row">
-      ${spread ? `<span class="pill">Spread <b>${esc(spread)}</b></span>` : ""}
-      ${total != null ? `<span class="pill">O/U <b>${esc(total)}</b></span>` : ""}
+      ${picks.spread_away ? ["away", "home"].map((s) => picks[`spread_${s}`] ? `<button class="pill pick" ${pickAttr(picks[`spread_${s}`])}
+        title="Spread · ${esc(picks[`spread_${s}`].book)}">${esc(picks[`spread_${s}`].label)} <small>${oddsFmt(picks[`spread_${s}`].price)}</small></button>` : "").join("")
+        : spread ? `<span class="pill">Spread <b>${esc(spread)}</b></span>` : ""}
+      ${picks.total_over ? ["over", "under"].map((s) => picks[`total_${s}`] ? `<button class="pill pick" ${pickAttr(picks[`total_${s}`])}
+        title="Total · ${esc(picks[`total_${s}`].book)}">${s === "over" ? "O" : "U"} ${esc(picks[`total_${s}`].point)} <small>${oddsFmt(picks[`total_${s}`].price)}</small></button>` : "").join("")
+        : total != null ? `<span class="pill">O/U <b>${esc(total)}</b></span>` : ""}
       ${o.draw_ml != null || best.draw_ml ? `<span class="pill">Draw <b>${oddsFmt(best.draw_ml?.price ?? o.draw_ml)}</b></span>` : ""}
       ${o.provider && !g.books?.length ? `<span class="pill">${esc(o.provider)}</span>` : ""}
       ${g.odds_live ? `<span class="pill live-odds" title="Prices fetched during the game ${esc(ago(g.odds_at))}">⚡ Live odds</span>`
@@ -383,6 +443,151 @@ async function showSports() {
   loadGames();
 }
 
+/* ============================ PRETEND BET SLIP ============================ */
+
+const slip = { legs: store.get("slip", []), kind: store.get("slipKind", "parlay"), stake: store.get("slipStake", 10), tab: "slip", mine: null };
+const money = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function saveSlip() {
+  store.set("slip", slip.legs);
+  store.set("slipKind", slip.kind);
+  store.set("slipStake", slip.stake);
+  $("#slip-count").textContent = slip.legs.length;
+  $("#slip-count").hidden = !slip.legs.length;
+}
+
+function togglePick(k) {
+  const p = PICKS.get(k);
+  if (!p) return;
+  const i = slip.legs.findIndex((l) => pickKey(l) === k);
+  if (i >= 0) slip.legs.splice(i, 1);
+  else if (slip.legs.length >= 15) { openSlip("slip"); renderSlip("You can have up to 15 picks."); return; }
+  else slip.legs.push(p);
+  saveSlip();
+  $$(`[data-pick="${CSS.escape(k)}"]`).forEach((el) => el.toggleAttribute("aria-pressed", i < 0));
+  if (!$("#slip").hidden) renderSlip();
+  $("#slip-open").classList.remove("bump"); void $("#slip-open").offsetWidth; $("#slip-open").classList.add("bump");
+}
+
+function openSlip(tab = "slip") {
+  slip.tab = tab;
+  $("#slip").hidden = false;
+  $("#chat").hidden = true;
+  renderSlip();
+}
+
+let quoteTimer = null;
+function renderSlip(msg = "") {
+  $$("[data-slip-tab]").forEach((c) => c.classList.toggle("active", c.dataset.slipTab === slip.tab));
+  if (slip.tab === "mine") { renderMine(); return; }
+  const legs = slip.legs;
+  if (!legs.length) {
+    $("#slip-body").innerHTML = `<div class="empty">Tap any price on a game (moneyline, spread, over/under, or a player prop in ＋ More bets) to add it here.</div>`;
+    return;
+  }
+  const kind = legs.length < 2 ? "singles" : slip.kind;
+  $("#slip-body").innerHTML = `
+    ${msg ? `<p class="small down">${esc(msg)}</p>` : ""}
+    <ul class="slip-legs">${legs.map((l, i) => `<li>
+      <div><b>${esc(l.label)}</b><small>${esc(l.game)}${l.book ? ` · ${esc(l.book)}` : ""}</small></div>
+      <span class="slip-odds">${oddsFmt(l.price)}</span>
+      <button class="icon-btn" data-slip-remove="${i}" title="Remove">✕</button></li>`).join("")}</ul>
+    <div id="slip-notes"></div>
+    ${legs.length >= 2 ? `<div class="chips slip-kind">
+      <button class="chip ${kind === "parlay" ? "active" : ""}" data-slip-kind="parlay">Parlay (${legs.length} picks)</button>
+      <button class="chip ${kind === "singles" ? "active" : ""}" data-slip-kind="singles">Singles</button></div>` : ""}
+    <label class="slip-stake">${kind === "singles" && legs.length > 1 ? "Stake per pick" : "Stake"}
+      <span>$<input id="slip-stake" type="number" min="1" step="1" value="${esc(slip.stake)}"></span></label>
+    <div class="chips">${[5, 10, 25, 50, 100].map((v) => `<button class="chip" data-stake="${v}">$${v}</button>`).join("")}</div>
+    <div id="slip-quote" class="slip-quote"></div>
+    <button id="slip-place" class="btn-glow wide">Place pretend bet</button>
+    <button class="link-btn" data-slip-clear>Clear slip</button>`;
+  $("#slip-stake").addEventListener("input", () => { slip.stake = Number($("#slip-stake").value) || 0; saveSlip(); requestQuote(); });
+  requestQuote();
+}
+
+function requestQuote() {
+  clearTimeout(quoteTimer);
+  quoteTimer = setTimeout(async () => {
+    const kind = slip.legs.length < 2 ? "singles" : slip.kind;
+    try {
+      const r = await api("/bets/quote", { legs: slip.legs, stake: slip.stake, kind });
+      $("#slip-notes").innerHTML = r.notes.map((n) => `<p class="small ${n.startsWith("Both") ? "down" : "muted"}">⚠️ ${esc(n)}</p>`).join("");
+      const q = r.quote;
+      $("#slip-quote").innerHTML = !q ? "" : q.kind === "parlay"
+        ? `<div><span>Parlay odds</span><b>${oddsFmt(q.american)}</b></div>
+           <div><span>To win</span><b class="up">${money(q.to_win)}</b></div>
+           <div><span>Total payout</span><b>${money(q.payout)}</b></div>
+           <div><span>Chance it hits</span><b>≈${q.chance}%</b></div>`
+        : `<div><span>Total stake</span><b>${money(q.stake)}</b></div>
+           <div><span>To win (if all hit)</span><b class="up">${money(q.to_win)}</b></div>
+           <div><span>Total payout</span><b>${money(q.payout)}</b></div>`;
+    } catch (e) { $("#slip-quote").innerHTML = `<p class="small down">${esc(e.message)}</p>`; }
+  }, 120);
+}
+
+async function placeSlip() {
+  const kind = slip.legs.length < 2 ? "singles" : slip.kind;
+  $("#slip-place").disabled = true;
+  try {
+    slip.mine = await api("/bets", { legs: slip.legs, stake: slip.stake, kind });
+    slip.legs = [];
+    saveSlip();
+    $$("[data-pick][aria-pressed]").forEach((el) => el.removeAttribute("aria-pressed"));
+    openSlip("mine");
+    toast("🎟️ Pretend bet placed. It's under <b>My bets</b>.", 4000);
+  } catch (e) {
+    renderSlip(e.message);
+  }
+}
+
+const RESULT = { won: "✅ Won", lost: "❌ Lost", push: "↔ Push", open: "⏳ Open" };
+async function renderMine() {
+  const body = $("#slip-body");
+  if (!slip.mine) body.innerHTML = `<div class="empty">Loading…</div>`;
+  try { slip.mine = await api("/bets"); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const { bets, summary: s } = slip.mine;
+  body.innerHTML = `<div class="slip-quote bankroll">
+      <div><span>Pretend balance</span><b>${money(s.balance)}</b></div>
+      <div><span>Profit / loss</span><b class="${s.profit >= 0 ? "up" : "down"}">${s.profit >= 0 ? "+" : "−"}${money(Math.abs(s.profit))}</b></div>
+      <div><span>Record (W-L)</span><b>${esc(s.record)}</b></div>
+      <div><span>Riding on open bets</span><b>${money(s.open_stake)}</b></div></div>
+    ${bets.map((b) => `<div class="my-bet ${b.status}">
+      <div class="my-bet-top"><b>${b.kind === "parlay" ? `${b.legs.length}-pick parlay` : "Single"}</b>
+        <span>${RESULT[b.status]}</span></div>
+      <div class="small muted">${money(b.stake)} to win ${money(b.potential - b.stake)} · ${new Date(b.placed * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}${b.status === "won" ? ` · paid ${money(b.payout)}` : ""}</div>
+      <ul>${b.legs.map((l, i) => `<li><span>${RESULT[l.result].split(" ")[0]} ${esc(l.label)} <small>${oddsFmt(l.price)} · ${esc(l.game)}</small></span>
+        ${l.result === "open" && !["ml", "spread", "total"].includes(l.market) ? `<span class="mark">
+          <button class="link-btn" data-mark="${b.id}|${i}|won">Won</button>
+          <button class="link-btn" data-mark="${b.id}|${i}|lost">Lost</button>
+          <button class="link-btn" data-mark="${b.id}|${i}|push">Push</button></span>` : ""}</li>`).join("")}</ul>
+    </div>`).join("") || `<div class="empty">No pretend bets yet.</div>`}
+    <p class="small muted">Moneyline, spread and total picks settle themselves after the final score. Mark props yourself.</p>
+    <button class="link-btn" data-slip-reset>Start over with $1,000</button>`;
+}
+
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-pick],[data-slip-tab],[data-slip-remove],[data-slip-kind],[data-stake],[data-slip-clear],[data-mark],[data-slip-reset],#slip-place");
+  if (!t) return;
+  const d = t.dataset;
+  if (d.pick) togglePick(d.pick);
+  else if (d.slipTab) { slip.tab = d.slipTab; renderSlip(); }
+  else if (d.slipRemove != null) { slip.legs.splice(Number(d.slipRemove), 1); saveSlip(); renderSlip(); if (!$("#sports").hidden) renderGames(); }
+  else if (d.slipKind) { slip.kind = d.slipKind; saveSlip(); renderSlip(); }
+  else if (d.stake) { slip.stake = Number(d.stake); saveSlip(); renderSlip(); }
+  else if (d.slipClear != null) { slip.legs = []; saveSlip(); renderSlip(); if (!$("#sports").hidden) renderGames(); }
+  else if (t.id === "slip-place") placeSlip();
+  else if (d.mark) {
+    const [id, leg, result] = d.mark.split("|");
+    try { slip.mine = await api(`/bets/${id}/mark`, { leg: Number(leg), result }); renderMine(); } catch (err) { toast(esc(err.message)); }
+  } else if (d.slipReset != null) {
+    if (confirm("Clear all pretend bets and start over with $1,000?")) { slip.mine = await api("/bets/reset", { start: 1000 }); renderMine(); }
+  }
+});
+$("#slip-open").addEventListener("click", () => openSlip(slip.tab));
+$("#slip-close").addEventListener("click", () => { $("#slip").hidden = true; });
+saveSlip();
+
 /* ============================ MORE BETS ============================ */
 
 const more = { game: null, group: "", groups: {} };
@@ -420,7 +625,9 @@ async function loadMore(group, force = false) {
       · <button class="link-btn" data-more-refresh>↻ Refresh</button>`;
     $("#more-body").innerHTML = r.markets.map((m) => `<section class="more-market"><h4>${esc(m.label)}</h4>
       <table class="books"><thead><tr><th>${m.rows.some((x) => x.player) ? "Player" : "Pick"}</th><th></th><th>Best</th><th>Book</th></tr></thead><tbody>
-      ${m.rows.map((x) => `<tr title="${esc(x.books.map((b) => `${b.book} ${oddsFmt(b.price)}`).join(" · "))}">
+      ${m.rows.map((x) => `<tr class="pick-row" ${g.state === "post" ? "" : pickAttr({ ...gameBase(g), market: m.key, side: x.side, player: x.player, point: x.point,
+        price: x.best.price, book: x.best.book, line_key: `${m.key}|${x.point ?? ""}`,
+        label: `${x.player ? `${x.player} ` : ""}${x.side}${x.point != null ? ` ${x.point}` : ""} · ${m.label}` })} title="Tap to add to your bet slip · ${esc(x.books.map((b) => `${b.book} ${oddsFmt(b.price)}`).join(" · "))}">
         <td>${esc(x.player || x.side)}</td>
         <td>${x.player ? esc(x.side) : ""}${x.point != null ? ` ${esc(x.player || /total/i.test(m.key) ? x.point : pt(x.point))}` : ""}</td>
         <td class="best">${oddsFmt(x.best.price)}</td><td class="muted">${esc(x.best.book)}${x.books.length > 1 ? ` <small>+${x.books.length - 1}</small>` : ""}</td></tr>`).join("")}
@@ -786,6 +993,8 @@ function showMode() {
   $("#markets").hidden = mode !== "markets";
   $("#sports").hidden = mode !== "sports";
   $("#stock").hidden = mode !== "stock";
+  $("#slip-open").hidden = mode !== "sports";
+  if (mode !== "sports") $("#slip").hidden = true;
   if (mode !== "stock" && stockPage.symbol) closeStock();
   if (mode === "markets") showMarkets(); else if (mode === "sports") showSports(); else openStock(stockSym);
   if (!$("#chat").hidden) renderChat();
@@ -876,7 +1085,7 @@ $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat
 $("#chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat($("#chat-input").value); }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#chat").hidden = true; $("#settings").hidden = true; $("#more").hidden = true; } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#chat").hidden = true; $("#settings").hidden = true; $("#more").hidden = true; $("#slip").hidden = true; } });
 
 $("#odds-format").value = store.get("oddsFormat", "american");
 window.addEventListener("hashchange", showMode);
