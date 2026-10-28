@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ["RMT_DEMO"] = "0"
 os.environ["ODDS_API_KEY"] = ""
 
-from backend import ai, fetch, markets, news, sports  # noqa: E402
+from backend import ai, fetch, markets, news, odds, sports  # noqa: E402
 
 ESPN = {"events": [{
     "id": "401", "name": "Buffalo Bills at Kansas City Chiefs", "shortName": "BUF @ KC", "date": "2026-10-25T20:25Z",
@@ -89,6 +89,11 @@ def fake_get_json(url, params=None, timeout=10):
 
 def reset():
     fetch._cache.clear()
+    odds._lines.clear()
+    odds._viewed.clear()
+    odds._budget.update(remaining=None, used=None, at=0.0)
+    odds.get_with_headers = lambda url, params=None, timeout=10: (
+        json.dumps(ODDS_API).encode(), {"x-requests-remaining": "480", "x-requests-used": "20"})
 
 
 def test_espn_games_and_odds():

@@ -351,3 +351,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
   .stock-page { padding: 10px 12px; }
   .st-price { font-size: 32px; }
 }
+
+/* ---------- live scores & odds ---------- */
+.live-dot { color: var(--live); animation: blink 1.2s infinite; }
+.pill.live-odds { color: var(--lime); border-color: rgba(184, 255, 92, .5); font-weight: 700; }
+.game.score-flash .score { animation: scoreFlash 2.4s ease-out; }
+@keyframes scoreFlash { 0% { color: var(--lime); text-shadow: 0 0 12px var(--lime); transform: scale(1.25); } 100% { color: inherit; text-shadow: none; transform: scale(1); } }
+#games-note .link-btn { font-size: 12.5px; }

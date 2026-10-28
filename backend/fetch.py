@@ -46,6 +46,15 @@ def get(url: str, params: dict | None = None, timeout: float = 10, headers: dict
         return res.read()
 
 
+def get_with_headers(url: str, params: dict | None = None, timeout: float = 10) -> tuple[bytes, dict]:
+    """The body and the response headers (lowercase names)."""
+    if params:
+        url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl()) as res:
+        return res.read(), {k.lower(): v for k, v in res.headers.items()}
+
+
 def get_json(url: str, params: dict | None = None, timeout: float = 10, headers: dict | None = None):
     return json.loads(get(url, params, timeout, headers))
 
