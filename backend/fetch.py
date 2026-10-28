@@ -38,16 +38,16 @@ def _ssl() -> ssl.SSLContext:
     return _ctx
 
 
-def get(url: str, params: dict | None = None, timeout: float = 10) -> bytes:
+def get(url: str, params: dict | None = None, timeout: float = 10, headers: dict | None = None) -> bytes:
     if params:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout, context=_ssl()) as res:
         return res.read()
 
 
-def get_json(url: str, params: dict | None = None, timeout: float = 10):
-    return json.loads(get(url, params, timeout))
+def get_json(url: str, params: dict | None = None, timeout: float = 10, headers: dict | None = None):
+    return json.loads(get(url, params, timeout, headers))
 
 
 def cached(key: str, ttl: float, fn):
@@ -61,6 +61,13 @@ def cached(key: str, ttl: float, fn):
     with _lock:
         _cache[key] = (now, value)
     return value
+
+
+def forget(prefix: str) -> None:
+    """Drop saved results whose key starts with prefix (the Refresh button)."""
+    with _lock:
+        for key in [k for k in _cache if k.startswith(prefix)]:
+            del _cache[key]
 
 
 def _text(el, *names):

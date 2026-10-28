@@ -7,6 +7,8 @@ One app with two sides, **📈 Trading** and **🎲 Betting**, plus an AI chat t
 It runs on your own computer and opens in your web browser, the same way Life Control Center does.
 
 ### 📈 Trading
+- **Live crypto**: Bitcoin, Ethereum, Solana and more stream live from Coinbase (no key needed). The Crypto ribbon shows **⚡ LIVE** and each price flashes green or red as it ticks.
+- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, QQQ and the hottest names (30 in all) stream live, marked ⚡.
 - **Stock ribbons**: scrolling tickers for Indexes & Futures, Mega Caps, Day-Trader Favorites, ETFs, Crypto, and Commodities & FX. Each one shows the price, the % change and a mini chart. Hover over a ribbon to pause it.
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.
@@ -26,24 +28,40 @@ It uses RMT's live prices, headlines, games and odds, and searches the web for s
 
 ---
 
-## Start it
+## Install it (Windows, one time)
 
-**Windows:** double-click **`start.bat`** in the `RMT` folder. The first run takes a minute while it installs what it needs. Your browser then opens **http://localhost:8050**.
+1. Download RMT: **[RMT ZIP](https://github.com/jhauser2318-design/RMT/archive/refs/heads/main.zip)**. Open your **Downloads** folder, right-click the ZIP and choose **Extract All… → Extract**.
+2. Double-click **`INSTALL.bat`** in the extracted folder. It:
+   - installs Python for you if it's missing,
+   - copies RMT to **`C:\Users\<your name>\RMT`**,
+   - asks for your Anthropic API key, or reuses the one from Life Control Center automatically,
+   - puts an **RMT** icon on your Desktop and in the Start menu, then opens RMT.
+3. From then on, just **double-click RMT on your Desktop**. It opens in its own window (no browser tabs). Closing the window closes RMT.
 
-**Mac / Linux:** run `./start.sh`, then open **http://localhost:8050**.
+### Keeping it up to date
+- **Data:** the **⟳** button at the top refreshes everything right now. Next to it, **Auto** sets how often prices, scores and odds update by themselves: off, 15 seconds, 30 seconds, 1 minute or 5 minutes.
+- **New versions of RMT:** a dot on the **⚙** icon means a new version is ready. Click ⚙, then **Update now**. RMT never updates by itself, and your keys are never touched.
 
-The first run creates a file named **`.env`** in the `RMT` folder. Open it in Notepad to add your keys:
+*(Mac / Linux, or to see the server's messages: run `./start.sh` or `start.bat`, then open http://localhost:8050.)*
+
+## Keys
+
+Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in Notepad to add or change them, then close and reopen RMT.
 
 | Key | What it's for | Where to get it |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | The **Ask RMT** chat. Required for the chat; everything else works without it. | https://console.anthropic.com → API Keys (you can reuse your Life Control Center key) |
+| `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` | Real-time stock prices. Optional. Easiest: paste them under ⚙ → Live data. | https://alpaca.markets → sign up → Paper account → API Keys → Generate (free) |
 | `ODDS_API_KEY` | Odds from many sportsbooks side by side. Optional. | https://the-odds-api.com (free: 500 requests a month) |
 | `YOUTUBE_API_KEY` | Search all of YouTube by ticker or topic. Optional. | Google Cloud Console → enable **YouTube Data API v3** → Credentials |
 
-Save the file, then close and reopen RMT.
+| `GITHUB_TOKEN` | Only if the RMT repository on GitHub is **private**: lets the Update button download new versions. | github.com → Settings → Developer settings → Fine-grained token with read access to RMT |
+
+Want **truly live** stock prices, crypto and odds for free? See the plan in [docs/LIVE_DATA_PLAN.md](docs/LIVE_DATA_PLAN.md).
 
 ## Good to know
-- **Where the data comes from:** RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
+- **Costs:** everything in RMT is free except the AI chat, which costs a few cents per question. See [docs/LIVE_DATA_PLAN.md](docs/LIVE_DATA_PLAN.md#what-it-costs).
+- **Where the data comes from:** crypto streams live from Coinbase. Otherwise RMT reads the sites' public feeds: Yahoo Finance for prices, RSS for headlines, Reddit's public listings, YouTube channel feeds, and ESPN's scoreboard for games, odds and standings. Nothing needs a login.
 - **"Sample data" badge:** if RMT can't reach a source (no internet, or a site is down), it shows made-up sample numbers and the badge in the top-right corner says **Sample data** instead of **LIVE**. Never bet or trade on sample numbers.
 - Prices can be delayed up to ~15 minutes. Without `ODDS_API_KEY` you get one sportsbook's line per game (usually ESPN BET or DraftKings).
 - To follow different YouTube channels, edit the `YOUTUBE_CHANNELS` list in `backend/news.py`. The tickers on the ribbons are in `backend/markets.py`.

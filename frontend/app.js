@@ -9,10 +9,11 @@ const store = {
   set(k, v) { try { localStorage.setItem(`rmt.${k}`, JSON.stringify(v)); } catch { /* private mode */ } },
 };
 
-async function api(path, body) {
-  const res = await fetch(`/api${path}`, body ? {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  } : {});
+async function api(path, body, method = body ? "POST" : "GET") {
+  // X-RMT marks requests from RMT's own window; the server refuses changes without it.
+  const res = await fetch(`/api${path}`, method === "GET" ? {} : {
+    method, headers: { "Content-Type": "application/json", "X-RMT": "1" }, body: body ? JSON.stringify(body) : undefined,
+  });
   let data = null;
   try { data = await res.json(); } catch { /* empty */ }
   if (!res.ok) throw new Error(data?.detail || `Request failed (${res.status})`);
@@ -57,8 +58,8 @@ function badge(live) {
 }
 
 // A ribbon scrolls forever: the items are drawn twice and the track slides by half.
-function ribbonHTML(label, inner, count) {
-  return `<div class="ribbon"><div class="ribbon-label">${esc(label)}</div>
+function ribbonHTML(label, inner, count, id = "") {
+  return `<div class="ribbon" data-id="${esc(id)}"><div class="ribbon-label">${esc(label)}</div>
     <div class="ribbon-track" style="--dur:${Math.max(25, count * 4.5)}s">${inner}${inner}</div></div>`;
 }
 
@@ -71,8 +72,9 @@ async function loadRibbons() {
   try {
     const data = await api(`/markets/ribbons?watch=${encodeURIComponent(watch.join(","))}`);
     badge(data.live);
+    stamp();
     const groups = data.ribbons.filter((r) => r.items.length);
-    const tick = (q) => `<span class="tick-sym">${esc(q.label)}</span>
+    const tick = (q) => `${q.streaming ? `<span class="bolt" title="Live">⚡</span>` : ""}<span class="tick-sym">${esc(q.label)}</span>
         <span class="tick-px">${fmtPrice(q.price)}</span>
         <span class="tick-ch ${dir(q.pct)}">${fmtPct(q.pct)}</span>
         ${spark(q.spark, q.pct >= 0)}`;
@@ -85,7 +87,8 @@ async function loadRibbons() {
     }
     $("#ribbons").dataset.layout = layout;
     $("#ribbons").innerHTML = groups.map((r) => ribbonHTML(r.name, r.items.map((q) => `
-      <span class="tick" data-sym="${esc(q.symbol)}" title="${esc(q.name)}: click for news &amp; videos">${tick(q)}</span>`).join(""), r.items.length)).join("");
+      <span class="tick" data-sym="${esc(q.symbol)}" title="${esc(q.name)}: click for news &amp; videos">${tick(q)}</span>`).join(""), r.items.length, r.id)).join("");
+    showStreamStatus();
   } catch (e) {
     $("#ribbons").innerHTML = `<div class="empty">Couldn't load prices: ${esc(e.message)}</div>`;
   }
@@ -284,6 +287,7 @@ async function loadGames(quiet = false) {
   try {
     gamesData = await api(`/sports/games?league=${league}&date=${date}`);
     badge(gamesData.live);
+    stamp();
     renderGames();
   } catch (e) { $("#games").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -485,12 +489,199 @@ $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat
 $("#chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat($("#chat-input").value); }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#chat").hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#chat").hidden = true; $("#settings").hidden = true; } });
 
 $("#odds-format").value = store.get("oddsFormat", "american");
 window.addEventListener("hashchange", showMode);
 showMode();
 
-// Keep prices and scores fresh while the page is open.
-setInterval(() => { if (!document.hidden && !$("#markets").hidden) loadRibbons(); }, 30000);
-setInterval(() => { if (!document.hidden && !$("#sports").hidden) loadGames(true); }, 60000);
+/* ===================== LIVE PRICES ===================== */
+
+// The server keeps live connections to Coinbase (crypto) and Alpaca (stocks)
+// and pushes each new price here.
+const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" } };
+const lastPx = {};
+
+function applyLive(items) {
+  for (const p of items) {
+    const els = $$(`#ribbons .tick[data-sym="${CSS.escape(p.symbol)}"]`);
+    const prev = lastPx[p.symbol];
+    lastPx[p.symbol] = p.price;
+    for (const el of els) {
+      const px = el.querySelector(".tick-px");
+      const ch = el.querySelector(".tick-ch");
+      if (!px || !ch) continue;
+      if (!el.querySelector(".bolt")) el.insertAdjacentHTML("afterbegin", `<span class="bolt" title="Live">⚡</span>`);
+      px.textContent = fmtPrice(p.price);
+      ch.className = `tick-ch ${dir(p.pct)}`;
+      ch.textContent = fmtPct(p.pct);
+      if (prev != null && prev !== p.price) {
+        el.classList.remove("flash-up", "flash-down");
+        void el.offsetWidth;  // restart the flash animation
+        el.classList.add(p.price > prev ? "flash-up" : "flash-down");
+      }
+    }
+  }
+}
+
+function showStreamStatus() {
+  const c = streamInfo.crypto, k = streamInfo.stocks;
+  const cryptoLive = c.status === "live";
+  $$('.ribbon[data-id="crypto"]').forEach((r) => {
+    r.classList.toggle("streaming", cryptoLive);
+    r.title = cryptoLive ? `Live prices from ${c.source} (24-hour change)` : "";
+  });
+  const cryptoText = {
+    live: `⚡ Live, streaming from ${c.source}`,
+    connecting: `Connecting to ${c.source}…`,
+    offline: `Can't reach Coinbase right now${c.error ? ` (${c.error})` : ""}. Showing regular prices; retrying.`,
+    off: "Off (sample-data mode)",
+  }[c.status] || c.status;
+  const market = k.market_open === false ? " · market closed, prices move again at the next open" : "";
+  const stockText = {
+    live: `⚡ Live from Alpaca: ${k.streaming} stocks streaming, the rest real-time on each refresh${market}`,
+    connecting: "Connecting to Alpaca…",
+    offline: `Alpaca: ${k.error || "disconnected"}. Retrying.`,
+    error: k.error,
+    off: "Yahoo Finance (up to ~15 min delayed). Add free Alpaca keys below for real-time prices.",
+  }[k.status] || k.status;
+  $("#sources-status").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${cryptoLive ? "up" : "muted"}">${esc(cryptoText)}</span></div>
+    <div class="source"><span>📈 Stocks</span><span class="${k.status === "live" ? "up" : k.status === "error" ? "down" : "muted"}">${esc(stockText)}</span></div>
+    <div class="source"><span>🏈 Scores &amp; odds</span><span class="muted">ESPN${gamesData.multi_book ? " + The Odds API" : ""}, refreshed</span></div>`;
+  const hasKeys = k.configured && k.status !== "error";
+  $("#alpaca-form").hidden = hasKeys && !alpacaEditing;
+  $("#alpaca-change").hidden = !hasKeys || alpacaEditing;
+}
+
+let alpacaEditing = false;
+$("#alpaca-change").addEventListener("click", () => { alpacaEditing = true; showStreamStatus(); $("#alpaca-key").focus(); });
+$("#alpaca-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#alpaca-msg");
+  const btn = $("#alpaca-save");
+  btn.disabled = true;
+  msg.className = "small muted";
+  msg.textContent = "Checking the keys with Alpaca…";
+  try {
+    const res = await api("/settings/alpaca", { key_id: $("#alpaca-key").value, secret: $("#alpaca-secret").value });
+    msg.className = "small up";
+    msg.textContent = `${res.message} Saved. Live stock prices start in a few seconds.`;
+    $("#alpaca-secret").value = "";
+    alpacaEditing = false;
+    setTimeout(loadRibbons, 3000);
+  } catch (err) {
+    msg.className = "small down";
+    msg.textContent = err.message;
+  }
+  btn.disabled = false;
+});
+
+function startStream() {
+  if (!window.EventSource) return;
+  const es = new EventSource("/api/stream/live");  // reconnects by itself if the server restarts
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === "prices") applyLive(d.items);
+    else if (d.type === "status") { streamInfo[d.stream] = d; showStreamStatus(); }
+  };
+}
+
+/* ===================== REFRESH & UPDATES ===================== */
+
+function stamp() {
+  $("#updated-at").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+}
+
+async function refreshNow() {
+  const btn = $("#refresh-now");
+  btn.classList.add("spinning");
+  try { await api("/refresh", {}); } catch { /* still reload what we can */ }
+  if (!$("#markets").hidden) await Promise.all([loadRibbons(), loadNews(), loadTalk(), loadVideos($("#yt-q").value.trim())]);
+  else await Promise.all([loadGames(true), loadStandings()]);
+  btn.classList.remove("spinning");
+}
+
+// Auto-refresh: prices on the Trading side, scores and odds on the Betting side.
+let autoTimer = null;
+function setAutoRefresh(seconds) {
+  clearInterval(autoTimer);
+  store.set("autoRefresh", seconds);
+  if (seconds > 0) {
+    autoTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!$("#markets").hidden) loadRibbons(); else loadGames(true);
+    }, seconds * 1000);
+  }
+}
+
+async function showVersion() {
+  try {
+    const info = await api("/app/info");
+    $("#version-line").textContent = info.version
+      ? `Version ${info.version}${info.updated_at ? ` · installed ${new Date(info.updated_at).toLocaleDateString()}` : ""}`
+      : "Version: original download";
+  } catch { $("#version-line").textContent = "Version: unknown"; }
+}
+
+async function checkUpdate(quiet = false) {
+  const box = $("#update-box");
+  if (!quiet) box.innerHTML = `<p class="muted">Checking GitHub…</p>`;
+  try {
+    const res = await api("/app/update");
+    $("#update-dot").hidden = !res.available;
+    if (res.error) box.innerHTML = quiet ? "" : `<p class="muted">${esc(res.error)}</p>`;
+    else if (res.available) {
+      box.innerHTML = `<div class="update-new"><p><b>New version available</b><br>${esc(res.latest.summary)}</p>
+        <button id="update-now" class="btn-glow">Update now</button></div>`;
+    } else box.innerHTML = quiet ? "" : `<p class="muted">✅ You have the latest version.</p>`;
+  } catch (e) { if (!quiet) box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+}
+
+async function installUpdate() {
+  const box = $("#update-box");
+  box.innerHTML = `<p class="muted">Downloading and installing… don't close RMT.</p>`;
+  try {
+    const before = await api("/app/info").catch(() => ({}));
+    const res = await api("/app/update", {});
+    if (res.error) { box.innerHTML = `<p class="muted">${esc(res.error)}</p>`; return; }
+    if (!res.updated) { box.innerHTML = `<p class="muted">${esc(res.summary)}</p>`; return; }
+    if (!res.restarting) {
+      box.innerHTML = `<p class="muted">✅ Updated: ${esc(res.summary)}. Close RMT and open it again to finish.</p>`;
+      return;
+    }
+    box.innerHTML = `<p class="muted">✅ Updated: ${esc(res.summary)}. Restarting RMT…</p>`;
+    // Wait for the new server (a different process) to answer, then reload this window.
+    const started = Date.now();
+    const poll = async () => {
+      try {
+        const info = await api("/app/info");
+        if (info.pid !== before.pid) { location.reload(); return; }
+      } catch { /* still restarting */ }
+      if (Date.now() - started < 120000) setTimeout(poll, 1000);
+      else box.innerHTML = `<p class="muted">The update is installed. Close RMT and open it again.</p>`;
+    };
+    setTimeout(poll, 1500);
+  } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+}
+
+$("#refresh-now").addEventListener("click", refreshNow);
+$("#auto-refresh").value = String(store.get("autoRefresh", 30));
+$("#auto-refresh").addEventListener("change", () => setAutoRefresh(Number($("#auto-refresh").value)));
+setAutoRefresh(Number($("#auto-refresh").value));
+$("#settings-open").addEventListener("click", () => {
+  $("#settings").hidden = !$("#settings").hidden;
+  if (!$("#settings").hidden) { showVersion(); checkUpdate(); }
+});
+$("#update-check").addEventListener("click", () => checkUpdate());
+document.addEventListener("click", (e) => {
+  if (e.target.id === "update-now") installUpdate();
+  else if (!$("#settings").hidden && !e.target.closest("#settings, #settings-open")) $("#settings").hidden = true;
+});
+
+startStream();
+
+// Tell the server this window is still open (it stops itself a few minutes after the window closes).
+const ping = () => fetch("/api/app/ping", { method: "POST", headers: { "X-RMT": "1" } }).catch(() => {});
+ping();
+setInterval(ping, 15000);
+setTimeout(() => checkUpdate(true), 4000);  // just lights the ⚙ dot; never installs by itself
