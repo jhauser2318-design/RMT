@@ -8,7 +8,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 
 ### 📈 Trading
 - **Live crypto**: Bitcoin, Ethereum, Solana and more stream live from Coinbase (no key needed). The Crypto ribbon shows **⚡ LIVE** and each price flashes green or red as it ticks.
-- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, VOO, QQQ and the hottest names (30 in all) stream live, marked ⚡.
+- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, VOO, QQQ and the hottest names (30 in all) stream live, marked ⚡. Add a free Finnhub key too and ~50 more stream live, covering every stock on the ribbons.
 - **Stock ribbons**: scrolling tickers for Indexes & Futures, Mega Caps, Day-Trader Favorites, ETFs, Crypto, and Commodities & FX. Each one shows the price, the % change and a mini chart. Hover over a ribbon to pause it.
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Look up any stock**: type a ticker or company name in the 🔍 box at the top (or click any ticker on a ribbon) for its own page: price (live while you're viewing it, with Alpaca keys), a chart (1D, 5D, 1M, 6M, YTD, 1Y, 5Y) with hover details, key stats (market cap, P/E, EPS, dividend yield, beta, 52-week range, volume, short interest, analyst target, next earnings), the company profile, its news and videos, plus one-click links to Yahoo Finance, TradingView, Finviz, StockTwits and SEC filings.
@@ -53,6 +53,7 @@ Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in 
 |---|---|---|
 | `ANTHROPIC_API_KEY` | The **Ask RMT** chat. Required for the chat; everything else works without it. | https://console.anthropic.com → API Keys (you can reuse your Life Control Center key) |
 | `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` | Real-time stock prices. Optional. Easiest: paste them under ⚙ → Live data. | https://alpaca.markets → sign up → Paper account → API Keys → Generate (free) |
+| `FINNHUB_API_KEY` | ~50 more live-streamed stocks (on top of Alpaca's 30), so every stock on the ribbons ticks live. Optional. Easiest: paste it under ⚙ → Live data. | https://finnhub.io → Get free API key (free) |
 | `ODDS_API_KEY` | Odds from many sportsbooks side by side. Optional. | https://the-odds-api.com (free: 500 requests a month) |
 | `YOUTUBE_API_KEY` | Search all of YouTube by ticker or topic. Optional. | Google Cloud Console → enable **YouTube Data API v3** → Credentials |
 

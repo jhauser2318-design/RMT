@@ -773,7 +773,7 @@ showMode();
 
 // The server keeps live connections to Coinbase (crypto) and Alpaca (stocks)
 // and pushes each new price here.
-const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" } };
+const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" }, finnhub: { status: "off" } };
 const lastPx = {};
 
 function applyLive(items) {
@@ -820,13 +820,47 @@ function showStreamStatus() {
     error: k.error,
     off: "Yahoo Finance (up to ~15 min delayed). Add free Alpaca keys below for real-time prices.",
   }[k.status] || k.status;
+  const f = streamInfo.finnhub;
+  const finnText = {
+    live: `⚡ Live from Finnhub: ${f.streaming} more stocks streaming`,
+    connecting: "Connecting to Finnhub…",
+    offline: `Finnhub: ${f.error || "disconnected"}. Retrying.`,
+    error: f.error,
+    off: "Off. Add a free Finnhub key below to stream ~50 more stocks live.",
+  }[f.status] || f.status;
   $("#sources-status").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${cryptoLive ? "up" : "muted"}">${esc(cryptoText)}</span></div>
-    <div class="source"><span>📈 Stocks</span><span class="${k.status === "live" ? "up" : k.status === "error" ? "down" : "muted"}">${esc(stockText)}</span></div>
+    <div class="source"><span>📈 Stocks (Alpaca)</span><span class="${k.status === "live" ? "up" : k.status === "error" ? "down" : "muted"}">${esc(stockText)}</span></div>
+    <div class="source"><span>📈 More stocks (Finnhub)</span><span class="${f.status === "live" ? "up" : f.status === "error" ? "down" : "muted"}">${esc(finnText)}</span></div>
     <div class="source"><span>🏈 Scores &amp; odds</span><span class="muted">ESPN${gamesData.multi_book ? " + The Odds API" : ""}, refreshed</span></div>`;
   const hasKeys = k.configured && k.status !== "error";
   $("#alpaca-form").hidden = hasKeys && !alpacaEditing;
   $("#alpaca-change").hidden = !hasKeys || alpacaEditing;
+  const hasFinn = f.configured && f.status !== "error";
+  $("#finnhub-form").hidden = hasFinn && !finnhubEditing;
+  $("#finnhub-change").hidden = !hasFinn || finnhubEditing;
 }
+
+let finnhubEditing = false;
+$("#finnhub-change").addEventListener("click", () => { finnhubEditing = true; showStreamStatus(); $("#finnhub-key").focus(); });
+$("#finnhub-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#finnhub-msg");
+  $("#finnhub-save").disabled = true;
+  msg.className = "small muted";
+  msg.textContent = "Checking the key with Finnhub…";
+  try {
+    const res = await api("/settings/finnhub", { key: $("#finnhub-key").value });
+    msg.className = "small up";
+    msg.textContent = `${res.message} Saved. More live stocks start in a few seconds.`;
+    $("#finnhub-key").value = "";
+    finnhubEditing = false;
+    setTimeout(loadRibbons, 3000);
+  } catch (err) {
+    msg.className = "small down";
+    msg.textContent = err.message;
+  }
+  $("#finnhub-save").disabled = false;
+});
 
 let alpacaEditing = false;
 $("#alpaca-change").addEventListener("click", () => { alpacaEditing = true; showStreamStatus(); $("#alpaca-key").focus(); });
