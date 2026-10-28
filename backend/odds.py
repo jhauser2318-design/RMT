@@ -13,6 +13,7 @@ The odds include games in progress (live, in-play lines).
 import calendar
 import json
 import os
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -95,7 +96,8 @@ def _parse(data: list) -> list[dict]:
                         row["total"] = oc.get("point")
                         row["over_price" if oc["name"] == "Over" else "under_price"] = oc.get("price")
             books.append(row)
-        out.append({"home": ev["home_team"], "away": ev["away_team"], "start": ev["commence_time"], "books": books})
+        out.append({"home": ev["home_team"], "away": ev["away_team"], "start": ev["commence_time"], "books": books,
+                    "event_id": ev.get("id", "")})
     return out
 
 
@@ -127,3 +129,135 @@ def lines(league: str, sport_key: str, viewing: bool = True, force: bool = False
         except Exception:  # noqa: BLE001 (keep showing the last lines)
             pass
     return cached, fetched_at
+
+
+# ---------- "More bets": player props, halves/quarters/periods, alternate lines, team totals ----------
+# Only fetched when you open them for a game. The Odds API bills each market that returns
+# prices, per region, so a group costs at most as many credits as it has markets.
+
+EVENT_ODDS = "https://api.the-odds-api.com/v4/sports/{}/events/{}/odds"
+
+_FOOTBALL = {
+    "Player props": ["player_pass_yds", "player_pass_tds", "player_rush_yds", "player_receptions",
+                     "player_reception_yds", "player_anytime_td"],
+    "1st half": ["h2h_h1", "spreads_h1", "totals_h1"],
+    "1st quarter": ["h2h_q1", "spreads_q1", "totals_q1"],
+    "Alternate lines": ["alternate_spreads", "alternate_totals"],
+    "Team totals": ["team_totals"],
+}
+_BASKETBALL = {
+    "Player props": ["player_points", "player_rebounds", "player_assists", "player_threes",
+                     "player_points_rebounds_assists"],
+    "1st half": ["h2h_h1", "spreads_h1", "totals_h1"],
+    "1st quarter": ["h2h_q1", "spreads_q1", "totals_q1"],
+    "Alternate lines": ["alternate_spreads", "alternate_totals"],
+    "Team totals": ["team_totals"],
+}
+MARKET_GROUPS = {
+    "nfl": _FOOTBALL,
+    "ncaaf": _FOOTBALL,
+    "nba": _BASKETBALL,
+    "ncaab": {k: v for k, v in _BASKETBALL.items() if k != "1st quarter"},  # college basketball plays halves
+    "mlb": {
+        "Player props": ["batter_home_runs", "batter_hits", "batter_total_bases", "batter_rbis", "pitcher_strikeouts"],
+        "First 5 innings": ["h2h_1st_5_innings", "spreads_1st_5_innings", "totals_1st_5_innings"],
+        "Alternate lines": ["alternate_spreads", "alternate_totals"],
+        "Team totals": ["team_totals"],
+    },
+    "nhl": {
+        "Player props": ["player_points", "player_goal_scorer_anytime", "player_shots_on_goal", "player_assists"],
+        "1st period": ["h2h_p1", "spreads_p1", "totals_p1"],
+        "Alternate lines": ["alternate_spreads", "alternate_totals"],
+        "Team totals": ["team_totals"],
+    },
+    "ufc": {},
+}
+
+LABELS = {
+    "player_pass_yds": "Passing yards", "player_pass_tds": "Passing TDs", "player_rush_yds": "Rushing yards",
+    "player_receptions": "Receptions", "player_reception_yds": "Receiving yards", "player_anytime_td": "Anytime TD",
+    "player_points": "Points", "player_rebounds": "Rebounds", "player_assists": "Assists", "player_threes": "3-pointers made",
+    "player_points_rebounds_assists": "Pts + Reb + Ast", "batter_home_runs": "Home runs", "batter_hits": "Hits",
+    "batter_total_bases": "Total bases", "batter_rbis": "RBIs", "pitcher_strikeouts": "Pitcher strikeouts",
+    "player_goal_scorer_anytime": "Anytime goal", "player_shots_on_goal": "Shots on goal",
+    "h2h_h1": "1st half moneyline", "spreads_h1": "1st half spread", "totals_h1": "1st half total",
+    "h2h_q1": "1st quarter moneyline", "spreads_q1": "1st quarter spread", "totals_q1": "1st quarter total",
+    "h2h_p1": "1st period moneyline", "spreads_p1": "1st period spread", "totals_p1": "1st period total",
+    "h2h_1st_5_innings": "First 5 moneyline", "spreads_1st_5_innings": "First 5 run line",
+    "totals_1st_5_innings": "First 5 total", "alternate_spreads": "Alternate spreads",
+    "alternate_totals": "Alternate totals", "team_totals": "Team totals",
+}
+
+_more: dict[tuple, tuple[float, dict]] = {}
+MORE_TTL = 120  # a double click doesn't pay twice
+
+
+def groups(league: str) -> list[dict]:
+    return [{"name": n, "markets": len(m)} for n, m in MARKET_GROUPS.get(league, {}).items()]
+
+
+def _parse_event(ev: dict) -> list[dict]:
+    """{market: {(player or team, side, line): {book: price}}} → rows with the best price first."""
+    found: dict[str, dict[tuple, dict]] = {}
+    for bm in ev.get("bookmakers", []):
+        book = bm.get("title", bm.get("key"))
+        for m in bm.get("markets", []):
+            for oc in m.get("outcomes", []):
+                who = oc.get("description") or ""  # props: the player; otherwise empty
+                k = (who, oc.get("name", ""), oc.get("point"))
+                found.setdefault(m["key"], {}).setdefault(k, {})[book] = oc.get("price")
+    markets = []
+    for key, rows in found.items():
+        out = []
+        for (who, side, point), prices in rows.items():
+            best_book, best = max(prices.items(), key=lambda kv: kv[1] if kv[1] is not None else -10 ** 9)
+            out.append({"player": who, "side": side, "point": point, "best": {"price": best, "book": best_book},
+                        "books": [{"book": b, "price": p} for b, p in sorted(prices.items())]})
+        out.sort(key=lambda r: (r["player"], r["side"] not in ("Over", "Yes"), r["side"], r["point"] if r["point"] is not None else 0))
+        markets.append({"key": key, "label": LABELS.get(key, key.replace("_", " ").title()), "rows": out})
+    order = list(LABELS)
+    markets.sort(key=lambda m: order.index(m["key"]) if m["key"] in order else len(order))
+    return markets
+
+
+def more_bets(league: str, sport_key: str, event_id: str, group: str, force: bool = False) -> dict:
+    """One group of extra markets for one game. Spends credits (at most one per market in the group)."""
+    if not key():
+        raise OddsError("Add an Odds API key under ⚙ → Live data first.")
+    if not re.fullmatch(r"[A-Za-z0-9]{1,64}", event_id or ""):
+        raise OddsError("That game has no odds ID; refresh the page and try again.")
+    markets = MARKET_GROUPS.get(league, {}).get(group)
+    if not markets:
+        raise OddsError("Those bets aren't available for this league.")
+    cache_key = (event_id, group)
+    hit = _more.get(cache_key)
+    if hit and not force and time.time() - hit[0] < MORE_TTL:
+        return {**hit[1], "cached": True}
+    if _budget["remaining"] is not None and _budget["remaining"] < len(markets):
+        raise OddsError(f"Only {_budget['remaining']} odds credits left this month; this needs up to {len(markets)}.")
+    try:
+        body, headers = get_with_headers(EVENT_ODDS.format(sport_key, event_id), {
+            "apiKey": key(), "regions": "us", "markets": ",".join(markets), "oddsFormat": "american"})
+    except Exception as e:  # noqa: BLE001
+        code = getattr(e, "code", None)
+        if code in (401, 403):
+            raise OddsError("Your Odds API plan doesn't include these bets, or the key was refused.") from e
+        if code == 404:
+            raise OddsError("The sportsbooks aren't offering these for this game (yet).") from e
+        if code == 422:
+            raise OddsError("These bets aren't offered for this game.") from e
+        if code == 429:
+            raise OddsError("Out of odds credits (or too many requests). Try again later.") from e
+        raise OddsError(f"Couldn't reach The Odds API ({getattr(e, 'reason', e)}).") from e
+    rem, last = headers.get("x-requests-remaining"), headers.get("x-requests-last")
+    with _lock:
+        if rem is not None:
+            _budget.update(remaining=int(float(rem)), used=int(float(headers.get("x-requests-used") or 0)), at=time.time())
+    result = {"markets": _parse_event(json.loads(body)), "fetched_at": time.time(),
+              "cost": int(float(last)) if last is not None else None, "budget": budget()}
+    _more[cache_key] = (time.time(), result)
+    return result
+
+
+class OddsError(Exception):
+    pass

@@ -165,6 +165,83 @@ def test_save_key_endpoint():
             os.environ["ODDS_API_KEY"] = ""
 
 
+EVENT = {"id": "evt123", "home_team": "Kansas City Chiefs", "away_team": "Buffalo Bills", "bookmakers": [
+    {"title": "DraftKings", "markets": [
+        {"key": "player_pass_yds", "outcomes": [
+            {"name": "Over", "description": "Patrick Mahomes", "price": -115, "point": 274.5},
+            {"name": "Under", "description": "Patrick Mahomes", "price": -105, "point": 274.5}]},
+        {"key": "player_anytime_td", "outcomes": [{"name": "Yes", "description": "Travis Kelce", "price": 120}]}]},
+    {"title": "FanDuel", "markets": [
+        {"key": "player_pass_yds", "outcomes": [
+            {"name": "Over", "description": "Patrick Mahomes", "price": -110, "point": 274.5}]}]},
+]}
+
+
+def test_more_bets_props_best_price_and_credits():
+    import io
+    import urllib.error
+    setup()
+    asked = []
+
+    def fake(url, params=None, timeout=10):
+        asked.append((url, params))
+        return json.dumps(EVENT).encode(), {"x-requests-remaining": "490", "x-requests-used": "10", "x-requests-last": "2"}
+    odds.get_with_headers = fake
+    odds._more.clear()
+    groups = {g["name"]: g["markets"] for g in odds.groups("nfl")}
+    assert groups["Player props"] == 6 and "1st quarter" in groups and odds.groups("ncaab") and odds.groups("ufc") == []
+    r = odds.more_bets("nfl", "americanfootball_nfl", "evt123", "Player props")
+    url, params = asked[0]
+    assert url.endswith("/sports/americanfootball_nfl/events/evt123/odds") and params["markets"].startswith("player_pass_yds,")
+    assert r["cost"] == 2 and r["budget"]["remaining"] == 490
+    pass_yds = next(m for m in r["markets"] if m["key"] == "player_pass_yds")
+    assert pass_yds["label"] == "Passing yards"
+    over = next(x for x in pass_yds["rows"] if x["side"] == "Over")
+    assert over["player"] == "Patrick Mahomes" and over["point"] == 274.5
+    assert over["best"] == {"price": -110, "book": "FanDuel"} and len(over["books"]) == 2  # -110 beats -115
+    assert [m["key"] for m in r["markets"]] == ["player_pass_yds", "player_anytime_td"]
+
+    assert odds.more_bets("nfl", "americanfootball_nfl", "evt123", "Player props")["cached"] and len(asked) == 1  # no double charge
+    odds.more_bets("nfl", "americanfootball_nfl", "evt123", "Player props", force=True)
+    assert len(asked) == 2
+
+    for bad_id in ("../x", "", "a b"):
+        try:
+            odds.more_bets("nfl", "americanfootball_nfl", bad_id, "Player props")
+        except odds.OddsError:
+            pass
+        else:
+            raise AssertionError(f"{bad_id!r} must be refused")
+
+    odds._budget["remaining"] = 4  # 1st quarter needs up to 3: fine; props need up to 6: not
+    odds._more.clear()
+    try:
+        odds.more_bets("nfl", "americanfootball_nfl", "evt123", "Player props")
+    except odds.OddsError as e:
+        assert "credits left" in str(e)
+    else:
+        raise AssertionError("should stop before spending credits it doesn't have")
+
+    def not_on_plan(url, params=None, timeout=10):
+        raise urllib.error.HTTPError(url, 401, "no", {}, io.BytesIO(b""))
+    odds.get_with_headers = not_on_plan
+    odds._budget["remaining"] = 400
+    try:
+        odds.more_bets("nfl", "americanfootball_nfl", "evt123", "1st quarter")
+    except odds.OddsError as e:
+        assert "plan doesn't include" in str(e)
+
+
+def test_games_carry_the_odds_event_id():
+    setup()
+    ODDS_LIVE[0]["id"] = "abc999"
+    try:
+        g = sports.games("nfl")["games"][0]
+    finally:
+        del ODDS_LIVE[0]["id"]
+    assert g["odds_event_id"] == "abc999"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
