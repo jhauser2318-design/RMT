@@ -136,6 +136,21 @@ def app_ping():
     return {"ok": True}
 
 
+class AutoUpdateIn(BaseModel):
+    on: bool
+
+
+@app.get("/api/app/auto-update")
+def get_auto_update():
+    return {"on": updater.auto_enabled()}
+
+
+@app.post("/api/app/auto-update")
+def set_auto_update(body: AutoUpdateIn):
+    updater.set_auto(body.on)
+    return {"on": updater.auto_enabled()}
+
+
 @app.get("/api/app/update")
 def app_update_check():
     return updater.check()

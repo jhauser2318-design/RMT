@@ -1,4 +1,8 @@
-"""Updates RMT to the latest version on GitHub, only when you click "Update".
+"""Keeps RMT up to date with the latest version on GitHub.
+
+By default the launcher installs a newer version every time you open RMT,
+like Life Control Center (turn it off under ⚙ → Updates; auto_enabled()).
+The "Update now" button in ⚙ does the same on demand.
 
   1. check() asks GitHub which version is newest (one tiny request) and
      whether it's newer than the one installed,
@@ -74,6 +78,27 @@ def describe_error(e: Exception) -> str:
     if isinstance(reason, socket.gaierror):
         return "Couldn't reach github.com. Check that you're connected to the internet."
     return f"Couldn't connect to GitHub ({reason})."
+
+
+SETTINGS_FILE = ROOT / "data" / "settings.json"
+
+
+def auto_enabled() -> bool:
+    """Install new versions automatically when RMT opens (on unless turned off)."""
+    try:
+        return bool(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")).get("auto_update", True))
+    except Exception:  # noqa: BLE001 (no settings yet)
+        return True
+
+
+def set_auto(on: bool) -> None:
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        data = {}
+    data["auto_update"] = bool(on)
+    SETTINGS_FILE.parent.mkdir(exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def installed() -> dict:

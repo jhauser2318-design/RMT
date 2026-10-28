@@ -51,8 +51,9 @@
       </div>
       <h3 class="sources-head">Updates</h3>
       <div id="update-box"></div>
+      <label class="check"><input type="checkbox" id="auto-update"> Update automatically when RMT opens</label>
       <button id="update-check" class="btn">Check for updates</button>
-      <p class="muted small">Updates only install when you click <b>Update</b>. Your keys (.env) are never touched.</p>
+      <p class="muted small">Updates never touch your keys (.env) or settings.</p>
     </div>
   </header>
 
@@ -171,6 +172,8 @@
       <button class="btn-glow" id="chat-send">Send</button>
     </form>
   </aside>
+
+  <div id="toast" class="toast" hidden></div>
 
   <footer class="foot">
     RMT is for information and fun, not financial or betting advice. Prices may be delayed. Bet and trade only what you can afford to lose.
