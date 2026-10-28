@@ -147,6 +147,21 @@ def test_snapshots_and_ribbon_prices():
     assert alpaca.snapshots(["AAPL"]) == {}
 
 
+def test_voo_is_on_the_etf_ribbon_and_streams():
+    etfs = next(r for r in markets.RIBBONS if r["id"] == "etfs")
+    assert ("VOO", "") in etfs["symbols"]
+    use_keys("", "")
+    markets.get_json = lambda url, params=None, timeout=10: (_ for _ in ()).throw(OSError("offline"))
+    real = alpaca.stocks.set_wanted
+    seen = []
+    alpaca.stocks.set_wanted = seen.extend
+    try:
+        markets.ribbons(["TSLA"])
+    finally:
+        alpaca.stocks.set_wanted = real
+    assert seen[:4] == ["TSLA", "SPY", "VOO", "QQQ"]  # watchlist, then the index ETFs: inside the 30 that stream
+
+
 def test_key_check():
     alpaca.get_json = fake_get_json
     use_keys("PKGOOD", "s3cret")

@@ -8,7 +8,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 
 ### 📈 Trading
 - **Live crypto**: Bitcoin, Ethereum, Solana and more stream live from Coinbase (no key needed). The Crypto ribbon shows **⚡ LIVE** and each price flashes green or red as it ticks.
-- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, QQQ and the hottest names (30 in all) stream live, marked ⚡.
+- **Real-time stocks (free, optional)**: paste free Alpaca keys under ⚙ → Live data and stock prices become real-time. Your watchlist, SPY, VOO, QQQ and the hottest names (30 in all) stream live, marked ⚡.
 - **Stock ribbons**: scrolling tickers for Indexes & Futures, Mega Caps, Day-Trader Favorites, ETFs, Crypto, and Commodities & FX. Each one shows the price, the % change and a mini chart. Hover over a ribbon to pause it.
 - **My Watchlist**: add your own tickers (e.g. `AAPL, TSLA, BTC-USD`) to get your own ribbon at the top.
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.

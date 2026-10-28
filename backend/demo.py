@@ -16,7 +16,7 @@ BASE = {
     "JPM": 247, "LLY": 802, "V": 316, "WMT": 92, "XOM": 113, "NFLX": 905, "COST": 948, "AMD": 126,
     "PLTR": 71, "SMCI": 34, "COIN": 298, "MSTR": 362, "HOOD": 41, "SOFI": 15.6, "RIVN": 13.1,
     "GME": 28.4, "AMC": 4.6, "MARA": 21.3, "RIOT": 11.8, "NIO": 4.4, "ARM": 142, "RDDT": 163,
-    "IONQ": 38, "SPY": 603, "QQQ": 521, "IWM": 233, "DIA": 441, "TQQQ": 83, "SQQQ": 7.6,
+    "IONQ": 38, "SPY": 603, "VOO": 552, "QQQ": 521, "IWM": 233, "DIA": 441, "TQQQ": 83, "SQQQ": 7.6,
     "SOXL": 29, "ARKK": 61, "XLF": 49, "XLE": 92, "TLT": 92, "GLD": 243, "BTC-USD": 98200,
     "ETH-USD": 3420, "SOL-USD": 214, "XRP-USD": 2.31, "DOGE-USD": 0.38, "ADA-USD": 1.02,
     "AVAX-USD": 44, "LINK-USD": 23.5, "CL=F": 70.2, "GC=F": 2650, "SI=F": 30.8, "NG=F": 3.2,
