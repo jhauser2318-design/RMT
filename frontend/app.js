@@ -284,7 +284,7 @@ function renderGamesNote() {
     if (league !== "all") parts.push(`<button class="link-btn" id="odds-now" title="Uses 3 credits">↻ Update odds now</button>`);
     else parts.push(`<span class="muted">Pick a league to refresh its odds</span>`);
   } else if (gamesData.games.length) {
-    parts.push("Showing one sportsbook's line per game. Add a free ODDS_API_KEY in .env to compare DraftKings, FanDuel, BetMGM and more side by side.");
+    parts.push("Showing one sportsbook's line per game. Add a free Odds API key under ⚙ → Live data to compare DraftKings, FanDuel, BetMGM and more side by side.");
   }
   note.hidden = !parts.length;
   note.innerHTML = parts.join(" · ");
@@ -891,7 +891,7 @@ function showStreamStatus() {
       streamInfo.sports.status === "live" ? `⚡ ESPN, games in progress update every ${streamInfo.sports.every || 15}s` : "ESPN, refreshed"}</span></div>
     <div class="source"><span>🎲 Odds</span><span class="muted">${(streamInfo.sports.odds || {}).configured
       ? `The Odds API: many sportsbooks, live during games${(streamInfo.sports.odds || {}).remaining != null ? ` · ${streamInfo.sports.odds.remaining} credits left` : ""}`
-      : "ESPN (one sportsbook). Add an ODDS_API_KEY for many sportsbooks and live odds."}</span></div>`;
+      : "ESPN (one sportsbook). Add an Odds API key below for many sportsbooks and live odds."}</span></div>`;
   const hasKeys = k.configured && k.status !== "error";
   $("#alpaca-form").hidden = hasKeys && !alpacaEditing;
   $("#alpaca-change").hidden = !hasKeys || alpacaEditing;
@@ -899,6 +899,49 @@ function showStreamStatus() {
   $("#finnhub-form").hidden = hasFinn && !finnhubEditing;
   $("#finnhub-change").hidden = !hasFinn || finnhubEditing;
 }
+
+// Odds API and Anthropic keys: paste, test, save. Once saved, the form shrinks to a "Change key" link.
+async function showKeyForms() {
+  let have = {};
+  try { have = await api("/settings/keys"); } catch { /* older server */ }
+  $$(".key-form").forEach((f) => {
+    const saved = have[f.dataset.key];
+    f.classList.toggle("saved", !!saved && !f.dataset.editing);
+    const msg = f.querySelector(".key-msg");
+    if (saved && !f.dataset.editing && !f.dataset.justSaved) {
+      msg.innerHTML = `✅ Key saved. <button class="link-btn" type="button" data-change-key>Change key</button>`;
+    }
+  });
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-change-key]");
+  if (!b) return;
+  const f = b.closest(".key-form");
+  f.dataset.editing = "1";
+  f.classList.remove("saved");
+  f.querySelector("input").focus();
+});
+$$(".key-form").forEach((f) => f.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = f.querySelector("input"), msg = f.querySelector(".key-msg"), btn = f.querySelector("button");
+  btn.disabled = true;
+  msg.className = "small muted key-msg";
+  msg.textContent = "Checking the key…";
+  try {
+    const res = await api("/settings/key", { name: f.dataset.key, value: input.value });
+    msg.className = "small up key-msg";
+    msg.textContent = `${res.message} Saved.`;
+    input.value = "";
+    delete f.dataset.editing;
+    f.dataset.justSaved = "1";
+    f.classList.add("saved");
+    if (f.dataset.key === "ODDS_API_KEY" && sportsLoaded) loadGames(true);
+  } catch (err) {
+    msg.className = "small down key-msg";
+    msg.textContent = err.message;
+  }
+  btn.disabled = false;
+}));
 
 let finnhubEditing = false;
 $("#finnhub-change").addEventListener("click", () => { finnhubEditing = true; showStreamStatus(); $("#finnhub-key").focus(); });
@@ -1044,7 +1087,7 @@ $("#auto-refresh").addEventListener("change", () => setAutoRefresh(Number($("#au
 setAutoRefresh(Number($("#auto-refresh").value));
 $("#settings-open").addEventListener("click", () => {
   $("#settings").hidden = !$("#settings").hidden;
-  if (!$("#settings").hidden) { showVersion(); checkUpdate(); }
+  if (!$("#settings").hidden) { showVersion(); checkUpdate(); showKeyForms(); }
 });
 $("#update-check").addEventListener("click", () => checkUpdate());
 api("/app/auto-update").then((r) => { $("#auto-update").checked = r.on; }).catch(() => {});

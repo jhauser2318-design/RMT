@@ -17,7 +17,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 - **YouTube**: **🔥 Popular** shows the most-watched stock and investing advice videos of the week from popular channels (Graham Stephan, Andrei Jikh, Humphrey Yang, Minority Mindset, Financial Education, Ticker Symbol: YOU, Meet Kevin, Warrior Trading, Humbled Trader), with view counts. Tabs for 📈 Investing, ⚡ Day trading and 📰 Market news (CNBC, Bloomberg, Yahoo Finance, WSJ). With an optional key, Popular also includes the most-viewed advice from all of YouTube.
 
 ### 🎲 Betting
-- **Every game** in the NFL, college football, NBA, college basketball, WNBA, MLB, NHL, Premier League, La Liga, Champions League, MLS and UFC, with live scores.
+- **Every game** in the NFL, college football, NBA, college basketball, MLB, NHL and UFC, with live scores.
 - **Live scores**: games in progress update every 15 seconds by themselves (no refresh), and the score flashes when it changes.
 - **Live odds**: with an Odds API key, lines from many sportsbooks keep updating during games, marked **⚡ Live odds** (otherwise a game shows its **Pre-game line**). RMT spreads your monthly odds credits evenly so they last the month (free plan: about every 1-3 hours per league you look at; $30 plan: every few minutes). "All sports" never uses credits; pick a league and click **Update odds now** to refresh it on the spot (3 credits).
 - **Odds on every game**: moneyline, spread and total. Switch between American odds, decimal odds and win %.
@@ -53,10 +53,10 @@ Your keys live in the **`.env`** file in `C:\Users\<your name>\RMT`. Open it in 
 
 | Key | What it's for | Where to get it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | The **Ask RMT** chat. Required for the chat; everything else works without it. | https://console.anthropic.com → API Keys (you can reuse your Life Control Center key) |
+| `ANTHROPIC_API_KEY` | The **Ask RMT** chat. Required for the chat; everything else works without it. Easiest: paste it under ⚙ → Live data. | https://console.anthropic.com → API Keys (you can reuse your Life Control Center key) |
 | `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` | Real-time stock prices. Optional. Easiest: paste them under ⚙ → Live data. | https://alpaca.markets → sign up → Paper account → API Keys → Generate (free) |
 | `FINNHUB_API_KEY` | ~50 more live-streamed stocks (on top of Alpaca's 30), so every stock on the ribbons ticks live. Optional. Easiest: paste it under ⚙ → Live data. | https://finnhub.io → Get free API key (free) |
-| `ODDS_API_KEY` | Odds from many sportsbooks side by side. Optional. | https://the-odds-api.com (free: 500 requests a month) |
+| `ODDS_API_KEY` | Odds from many sportsbooks side by side, and live odds during games. Optional. Easiest: paste it under ⚙ → Live data. | https://the-odds-api.com (free: 500 requests a month) |
 | `YOUTUBE_API_KEY` | Search all of YouTube by ticker or topic. Optional. | Google Cloud Console → enable **YouTube Data API v3** → Credentials |
 
 | `GITHUB_TOKEN` | Only if the RMT repository on GitHub is **private**: lets the Update button download new versions. | github.com → Settings → Developer settings → Fine-grained token with read access to RMT |

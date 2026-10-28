@@ -17,7 +17,7 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, fetch, finnhub, live_sports, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, fetch, finnhub, live_sports, markets, news, odds, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -137,6 +137,38 @@ def save_finnhub_key(body: FinnhubKeyIn):
         raise HTTPException(status_code=400, detail=str(e))
     markets.assign_streams()
     finnhub.stocks.keys_changed()
+    return {"ok": True, "message": message}
+
+
+KEY_TESTS = {"ODDS_API_KEY": odds.test_key, "ANTHROPIC_API_KEY": ai.test_key}
+
+
+class KeyIn(BaseModel):
+    name: str
+    value: str
+
+
+@app.get("/api/settings/keys")
+def which_keys():
+    """Which keys are filled in (never the keys themselves)."""
+    return {n: bool(os.getenv(n, "").strip()) for n in
+            ("ALPACA_KEY_ID", "FINNHUB_API_KEY", "ODDS_API_KEY", "ANTHROPIC_API_KEY")}
+
+
+@app.post("/api/settings/key")
+def save_key(body: KeyIn):
+    """Test a key (Odds API, Anthropic); if it works, save it in .env and use it right away."""
+    test = KEY_TESTS.get(body.name)
+    if not test:
+        raise HTTPException(status_code=400, detail="That key can't be set here.")
+    value = body.value.strip()
+    ok, message = test(value)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    try:
+        settings.save({body.name: value})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True, "message": message}
 
 

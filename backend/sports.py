@@ -19,13 +19,8 @@ LEAGUES = {
     "ncaaf": ("College Football", "football/college-football", "americanfootball_ncaaf", "🏈"),
     "nba": ("NBA", "basketball/nba", "basketball_nba", "🏀"),
     "ncaab": ("College Basketball", "basketball/mens-college-basketball", "basketball_ncaab", "🏀"),
-    "wnba": ("WNBA", "basketball/wnba", "basketball_wnba", "🏀"),
     "mlb": ("MLB", "baseball/mlb", "baseball_mlb", "⚾"),
     "nhl": ("NHL", "hockey/nhl", "icehockey_nhl", "🏒"),
-    "epl": ("Premier League", "soccer/eng.1", "soccer_epl", "⚽"),
-    "laliga": ("La Liga", "soccer/esp.1", "soccer_spain_la_liga", "⚽"),
-    "ucl": ("Champions League", "soccer/uefa.champions", "soccer_uefa_champs_league", "⚽"),
-    "mls": ("MLS", "soccer/usa.1", "soccer_usa_mls", "⚽"),
     "ufc": ("UFC", "mma/ufc", "mma_mixed_martial_arts", "🥊"),
 }
 

@@ -358,3 +358,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .game.score-flash .score { animation: scoreFlash 2.4s ease-out; }
 @keyframes scoreFlash { 0% { color: var(--lime); text-shadow: 0 0 12px var(--lime); transform: scale(1.25); } 100% { color: inherit; text-shadow: none; transform: scale(1); } }
 #games-note .link-btn { font-size: 12.5px; }
+
+.help-links { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.help-links a { color: var(--green); margin-left: 6px; white-space: nowrap; }
+.key-form.saved input, .key-form.saved button { display: none; }
