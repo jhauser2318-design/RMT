@@ -22,6 +22,11 @@
       <button role="tab" data-mode="markets" class="mode">📈 <span>Trading</span></button>
       <button role="tab" data-mode="sports" class="mode">🎲 <span>Betting</span></button>
     </nav>
+    <div class="stock-search" role="search">
+      <input id="ss-input" type="search" placeholder="🔍 Look up a stock: AAPL, Tesla, VOO…" autocomplete="off" spellcheck="false"
+             aria-label="Look up a stock" aria-controls="ss-list" aria-expanded="false">
+      <div id="ss-list" class="ss-list panel" role="listbox" hidden></div>
+    </div>
     <div class="top-right">
       <span id="data-badge" class="badge" hidden></span>
       <span id="updated-at" class="updated-at" title="When the data on screen was last loaded"></span>
@@ -157,6 +162,63 @@
         </div>
         <div id="standings" class="standings"></div>
       </aside>
+    </section>
+  </main>
+
+  <!-- ===================== STOCK PAGE ===================== -->
+  <main id="stock" class="mode-page stock-page" hidden>
+    <div class="stock-top">
+      <button id="stock-back" class="btn">← Back</button>
+      <div class="stock-title">
+        <h1 id="st-name">…</h1>
+        <div class="muted" id="st-sub"></div>
+      </div>
+      <div class="stock-actions">
+        <button id="st-watch" class="btn">★ Add to watchlist</button>
+        <button id="st-ask" class="btn-outline">✨ Ask RMT about it</button>
+      </div>
+    </div>
+
+    <div class="stock-price-row">
+      <span id="st-price" class="st-price">—</span>
+      <span id="st-change" class="st-change"></span>
+      <span id="st-live" class="badge" hidden></span>
+    </div>
+
+    <section class="panel chart-panel">
+      <div id="st-ranges" class="chips" role="tablist" aria-label="Chart range">
+        <button class="chip" data-range="1d">1D</button><button class="chip" data-range="5d">5D</button>
+        <button class="chip" data-range="1mo">1M</button><button class="chip" data-range="6mo">6M</button>
+        <button class="chip" data-range="ytd">YTD</button><button class="chip" data-range="1y">1Y</button>
+        <button class="chip" data-range="5y">5Y</button>
+        <span id="st-range-change" class="range-change"></span>
+      </div>
+      <div id="st-chart" class="st-chart"></div>
+    </section>
+
+    <section class="stock-cols">
+      <article class="panel">
+        <header class="panel-head"><h2>📊 Key stats</h2></header>
+        <div id="st-stats" class="stats-grid"></div>
+        <p id="st-stats-note" class="muted small" hidden></p>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h2>🏢 About</h2></header>
+        <div id="st-profile" class="profile"></div>
+        <h3 class="sources-head">More on other sites</h3>
+        <div id="st-links" class="chips"></div>
+      </article>
+    </section>
+
+    <section class="stock-cols">
+      <article class="panel">
+        <header class="panel-head"><h2>📰 News</h2></header>
+        <ul id="st-news" class="feed"></ul>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h2>▶️ Videos</h2></header>
+        <div id="st-videos" class="videos"></div>
+      </article>
     </section>
   </main>
 

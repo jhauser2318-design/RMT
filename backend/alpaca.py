@@ -162,6 +162,7 @@ class StockStream(LiveStream):
         super().__init__()
         self.url = url
         self.wanted: list[str] = []      # in priority order; the first 30 stream
+        self.focus: str | None = None    # the stock whose page is open
         self.prev: dict[str, float] = {}  # previous close, for the % change
         self.market = None
         self._ws = None
@@ -174,8 +175,14 @@ class StockStream(LiveStream):
         # without one, and after the close it's simply the last price.
         return 6 * 3600
 
+    def set_focus(self, symbol: str | None) -> None:
+        """The stock whose page is open: it streams live first, ahead of everything else."""
+        self.focus = symbol if symbol and is_stock(symbol) else None
+        self.set_wanted([s for s in self.wanted if s != self.focus])
+
     def set_wanted(self, symbols: list[str]) -> None:
         """Which stocks to stream, most important first (only the first 30 are used)."""
+        symbols = [self.focus, *symbols] if self.focus else symbols
         wanted = list(dict.fromkeys(s for s in symbols if is_stock(s) and s not in _bad))
         if wanted[:MAX_STREAM] == self.wanted[:MAX_STREAM]:
             self.wanted = wanted

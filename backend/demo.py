@@ -178,3 +178,38 @@ def search(query: str) -> list[dict]:
     q = query.replace(" ", "+")
     return [{"name": f"Search ESPN for “{query}”", "link": f"https://www.espn.com/search/_/q/{q}",
              "type": "", "detail": "Live search appears when RMT can reach ESPN", "image": ""}]
+
+
+STOCK_NAMES = {"AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "NVDA": "NVIDIA Corporation", "TSLA": "Tesla, Inc.",
+         "AMZN": "Amazon.com, Inc.", "GOOGL": "Alphabet Inc.", "META": "Meta Platforms, Inc.", "AMD": "Advanced Micro Devices",
+         "PLTR": "Palantir Technologies", "SPY": "SPDR S&P 500 ETF", "VOO": "Vanguard S&P 500 ETF", "QQQ": "Invesco QQQ Trust"}
+
+
+def stock_search(query: str) -> list[dict]:
+    q = query.strip().upper()
+    hits = [s for s, n in STOCK_NAMES.items() if s.startswith(q) or q in n.upper()] or ([q] if q.isalpha() and len(q) <= 5 else [])
+    return [{"symbol": s, "name": STOCK_NAMES.get(s, s), "exchange": "Sample", "type": "ETF" if s in ("SPY", "VOO", "QQQ") else "Stock"}
+            for s in hits[:8]]
+
+
+def stock_chart(symbol: str, rng: str) -> dict:
+    n = {"1d": 78, "5d": 130, "1mo": 150, "6mo": 126, "ytd": 200, "1y": 252, "5y": 260}.get(rng, 78)
+    step = {"1d": 300, "5d": 900, "1mo": 3600, "6mo": 86400, "ytd": 86400, "1y": 86400, "5y": 604800}.get(rng, 300)
+    q = quote(symbol)
+    r = _rng(symbol, rng)
+    price, pts, now = q["price"], [], int(time.time())
+    for i in range(n):
+        pts.append([now - (n - i) * step, round(price, 4)])
+        price *= 1 + r.gauss(0.0004, 0.006 if rng in ("1d", "5d") else 0.015)
+    scale = q["price"] / pts[-1][1]
+    pts = [[t, round(p * scale, 4)] for t, p in pts]
+    return {"symbol": symbol, "range": rng, "points": pts, "prev_close": q["price"] - q["change"] if rng == "1d" else None,
+            "meta": {}}
+
+
+def stock_details(symbol: str) -> dict:
+    q = quote(symbol)
+    return {"symbol": symbol, "name": STOCK_NAMES.get(symbol, symbol) + " (sample)", "exchange": "Sample data", "currency": "USD",
+            "type": "", "stats": [{"label": "Previous close", "value": f"{q['price'] - q['change']:,.2f}"},
+                                  {"label": "Market cap", "value": "—"}],
+            "profile": {}, "full_stats": False}
