@@ -18,6 +18,8 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 
 ### 🎲 Betting
 - **Every game** in the NFL, college football, NBA, college basketball, WNBA, MLB, NHL, Premier League, La Liga, Champions League, MLS and UFC, with live scores.
+- **Live scores**: games in progress update every 15 seconds by themselves (no refresh), and the score flashes when it changes.
+- **Live odds**: with an Odds API key, lines from many sportsbooks keep updating during games, marked **⚡ Live odds** (otherwise a game shows its **Pre-game line**). RMT spreads your monthly odds credits evenly so they last the month (free plan: about every 1-3 hours per league you look at; $30 plan: every few minutes). "All sports" never uses credits; pick a league and click **Update odds now** to refresh it on the spot (3 credits).
 - **Odds on every game**: moneyline, spread and total. Switch between American odds, decimal odds and win %.
 - **Compare sportsbooks** (optional free key): DraftKings, FanDuel, BetMGM, Caesars and more side by side, with the best price highlighted.
 - **Lines & Scores ribbon**: every game's line, scrolling across the top. Click one to jump to the game.

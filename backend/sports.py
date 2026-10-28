@@ -5,11 +5,12 @@ scoreboard data (no key needed). With an ODDS_API_KEY from the-odds-api.com,
 each game also gets moneyline, spread and total from many US sportsbooks,
 and the best price for each side is highlighted.
 """
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from . import demo
+from datetime import datetime
+
+from . import demo, odds
 from .fetch import cached, demo_mode, get_json
 
 LEAGUES = {
@@ -127,30 +128,6 @@ def _same_team(a: str, b: str) -> bool:
     return bool(a and b) and (a == b or a in b or b in a)
 
 
-def _odds_api(league: str, key: str) -> list[dict]:
-    data = get_json(ODDS.format(LEAGUES[league][2]), {
-        "apiKey": key, "regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"})
-    out = []
-    for ev in data:
-        books = []
-        for bm in ev.get("bookmakers", []):
-            row = {"book": bm.get("title", bm.get("key"))}
-            for m in bm.get("markets", []):
-                for oc in m.get("outcomes", []):
-                    side = "home" if oc["name"] == ev["home_team"] else "away" if oc["name"] == ev["away_team"] else None
-                    if m["key"] == "h2h":
-                        row[f"{side}_ml" if side else "draw_ml"] = oc.get("price")
-                    elif m["key"] == "spreads" and side:
-                        row[f"{side}_spread"] = oc.get("point")
-                        row[f"{side}_spread_price"] = oc.get("price")
-                    elif m["key"] == "totals":
-                        row["total"] = oc.get("point")
-                        row["over_price" if oc["name"] == "Over" else "under_price"] = oc.get("price")
-            books.append(row)
-        out.append({"home": ev["home_team"], "away": ev["away_team"], "start": ev["commence_time"], "books": books})
-    return out
-
-
 def _best(books: list[dict]) -> dict:
     best = {}
     for k in ("home_ml", "away_ml", "draw_ml", "home_spread_price", "away_spread_price", "over_price", "under_price"):
@@ -161,52 +138,65 @@ def _best(books: list[dict]) -> dict:
     return best
 
 
-def _league_games(league: str, date: str = "") -> list[dict]:
+def _league_games(league: str, date: str = "", espn_ttl: float = 60, odds_viewing: bool = True,
+                  odds_force: bool = False) -> list[dict]:
     path = LEAGUES[league][1]
     params = {"dates": date} if date else {}
     params["limit"] = 300 if league in ("ncaaf", "ncaab") else 100
     if league in ("ncaaf", "ncaab"):
         params["groups"] = "80" if league == "ncaaf" else "50"  # FBS / Division I: every game, not just Top 25
     try:
-        data = cached(f"espn:{league}:{date}", 60, lambda: get_json(ESPN.format(path), params))
+        data = cached(f"espn:{league}:{date}", espn_ttl, lambda: get_json(ESPN.format(path), params))
         games = _parse_espn(league, data)
     except Exception:  # noqa: BLE001
         games = []
-    key = os.getenv("ODDS_API_KEY", "").strip()
-    if key:
-        try:
-            lines = cached(f"odds:{league}", 600, lambda: _odds_api(league, key))  # 10 min: free plan is 500 requests/month
-        except Exception:  # noqa: BLE001
-            lines = []
-        for line in lines:
-            game = next((g for g in games if _same_team(g["home"]["name"], line["home"])
-                         and _same_team(g["away"]["name"], line["away"])), None)
-            if game is None:
-                game = {"id": f"{league}-odds-{_norm(line['home'])}-{_norm(line['away'])}", "league": league,
-                        "league_name": LEAGUES[league][0], "emoji": LEAGUES[league][3],
-                        "name": f"{line['away']} @ {line['home']}", "start": line["start"], "state": "pre",
-                        "detail": "", "venue": "", "broadcast": "", "odds": None, "link": "",
-                        "home": {"name": line["home"], "short": line["home"], "abbr": "", "logo": "", "record": "", "score": "", "winner": False, "color": ""},
-                        "away": {"name": line["away"], "short": line["away"], "abbr": "", "logo": "", "record": "", "score": "", "winner": False, "color": ""}}
-                games.append(game)
-            game["books"] = line["books"]
-            game["best"] = _best(line["books"])
+    lines, fetched_at = odds.lines(league, LEAGUES[league][2], viewing=odds_viewing, force=odds_force)
+    for line in lines:
+        game = next((g for g in games if _same_team(g["home"]["name"], line["home"])
+                     and _same_team(g["away"]["name"], line["away"])), None)
+        if game is None:
+            if date:
+                continue  # another day's game
+            game = {"id": f"{league}-odds-{_norm(line['home'])}-{_norm(line['away'])}", "league": league,
+                    "league_name": LEAGUES[league][0], "emoji": LEAGUES[league][3],
+                    "name": f"{line['away']} @ {line['home']}", "start": line["start"], "state": "pre",
+                    "detail": "", "venue": "", "broadcast": "", "odds": None, "link": "",
+                    "home": {"name": line["home"], "short": line["home"], "abbr": "", "logo": "", "record": "", "score": "", "winner": False, "color": ""},
+                    "away": {"name": line["away"], "short": line["away"], "abbr": "", "logo": "", "record": "", "score": "", "winner": False, "color": ""}}
+            games.append(game)
+        game["books"] = line["books"]
+        game["best"] = _best(line["books"])
+        game["odds_at"] = fetched_at
+        # Fetched after kickoff = live, in-play prices.
+        game["odds_live"] = game["state"] == "in" and fetched_at > _epoch(game.get("start"))
     return games
 
 
-def games(league: str = "all", date: str = "") -> dict:
+def _epoch(iso: str | None) -> float:
+    try:
+        return datetime.fromisoformat((iso or "").replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def games(league: str = "all", date: str = "", force_odds: bool = False) -> dict:
     """Games for one league (or every league), soonest and live first."""
     ids = list(LEAGUES) if league == "all" else [league] if league in LEAGUES else []
     if demo_mode():
         return {"live": False, "games": demo.games(ids), "multi_book": False}
+    # "All sports" never spends odds credits: it shows what each league last fetched.
+    viewing = league != "all"
     with ThreadPoolExecutor(max_workers=12) as pool:
-        lists = list(pool.map(lambda l: _league_games(l, date), ids))
+        lists = list(pool.map(lambda l: _league_games(l, date, odds_viewing=viewing, odds_force=force_odds), ids))
     out = [g for lst in lists for g in lst]
     if not out:
         return {"live": False, "games": demo.games(ids), "multi_book": False}
+    return {"live": True, "games": sort_games(out), "multi_book": bool(odds.key()), "odds_budget": odds.budget()}
+
+
+def sort_games(games: list[dict]) -> list[dict]:
     order = {"in": 0, "pre": 1, "post": 2}
-    out.sort(key=lambda g: (order.get(g["state"], 1), g["start"] or ""))
-    return {"live": True, "games": out, "multi_book": bool(os.getenv("ODDS_API_KEY", "").strip())}
+    return sorted(games, key=lambda g: (order.get(g["state"], 1), g["start"] or ""))
 
 
 def standings(league: str) -> dict:

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, fetch, finnhub, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, fetch, finnhub, live_sports, markets, news, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -58,9 +58,10 @@ async def start_streams():
         stream.crypto.start()
         alpaca.stocks.start()
         finnhub.stocks.start()
+        live_sports.scores.start()
 
 
-LIVE = [stream.crypto, alpaca.stocks, finnhub.stocks]
+LIVE = [stream.crypto, alpaca.stocks, finnhub.stocks, live_sports.scores]
 
 
 @app.get("/api/stream/status")
@@ -275,6 +276,14 @@ def get_leagues():
 @app.get("/api/sports/games")
 def get_games(league: str = "all", date: str = ""):
     return sports.games(league, date)
+
+
+@app.post("/api/sports/odds-now")
+def odds_now(league: str):
+    """"Update odds now" for one league: spends 3 credits right away."""
+    if league not in sports.LEAGUES:
+        raise HTTPException(status_code=400, detail="Pick one league first.")
+    return sports.games(league, force_odds=True)
 
 
 @app.get("/api/sports/standings")

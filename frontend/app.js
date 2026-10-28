@@ -240,10 +240,12 @@ function gameCard(g) {
       ${total != null ? `<span class="pill">O/U <b>${esc(total)}</b></span>` : ""}
       ${o.draw_ml != null || best.draw_ml ? `<span class="pill">Draw <b>${oddsFmt(best.draw_ml?.price ?? o.draw_ml)}</b></span>` : ""}
       ${o.provider && !g.books?.length ? `<span class="pill">${esc(o.provider)}</span>` : ""}
+      ${g.odds_live ? `<span class="pill live-odds" title="Prices fetched during the game ${esc(ago(g.odds_at))}">⚡ Live odds</span>`
+        : g.state === "in" && (spread || total != null) ? `<span class="pill" title="The line from before kickoff">Pre-game line</span>` : ""}
       ${!spread && total == null && awayMl == null ? `<span class="pill">No line posted yet</span>` : ""}
     </div>
     <div class="game-actions">
-      ${g.books?.length ? `<button class="btn" data-books="${esc(g.id)}">${openBooks.has(g.id) ? "Hide" : "Compare"} ${g.books.length} books</button>` : ""}
+      ${g.books?.length ? `<button class="btn" data-books="${esc(g.id)}">${openBooks.has(g.id) ? "Hide" : "Compare"} ${g.books.length} ${g.books.length === 1 ? "book" : "books"}</button>` : ""}
       <button class="btn-outline" data-ask-game="${esc(g.id)}">✨ Ask RMT</button>
       ${g.link ? `<a class="btn" href="${esc(g.link)}" target="_blank" rel="noopener">Gamecast ↗</a>` : ""}
     </div>
@@ -258,6 +260,53 @@ function visibleGames() {
     && (!find || `${g.home.name} ${g.away.name} ${g.home.abbr} ${g.away.abbr}`.toLowerCase().includes(find)));
 }
 
+function ago(t) {
+  if (!t) return "never";
+  const m = Math.round((Date.now() / 1000 - t) / 60);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+function renderGamesNote() {
+  const note = $("#games-note");
+  const live = gamesData.games.filter((g) => g.state === "in").length;
+  const sp = streamInfo.sports || {};
+  const parts = [];
+  if (live) parts.push(`<span class="live-dot">●</span> <b>${live} live</b>${sp.status === "live" ? ` · scores update every ${sp.every || 15}s` : ""}`);
+  const b = gamesData.odds_budget;
+  if (gamesData.multi_book && b) {
+    const fetched = Math.max(0, ...gamesData.games.map((g) => g.odds_at || 0));
+    const credits = b.remaining != null ? `${b.remaining} odds credits left this month` : "";
+    const every = b.every_min ? (b.every_min >= 60 ? `about every ${Math.round(b.every_min / 60)} h` : `about every ${b.every_min} min`) : "";
+    parts.push(`Odds from many sportsbooks · updated ${ago(fetched)}${credits ? ` · ${credits}` : ""}${every ? `, refreshing ${every}` : ""}`);
+    if (league !== "all") parts.push(`<button class="link-btn" id="odds-now" title="Uses 3 credits">↻ Update odds now</button>`);
+    else parts.push(`<span class="muted">Pick a league to refresh its odds</span>`);
+  } else if (gamesData.games.length) {
+    parts.push("Showing one sportsbook's line per game. Add a free ODDS_API_KEY in .env to compare DraftKings, FanDuel, BetMGM and more side by side.");
+  }
+  note.hidden = !parts.length;
+  note.innerHTML = parts.join(" · ");
+}
+
+// Pushed from the server: games whose score, clock or line just changed.
+function applyGames(items) {
+  const changed = [];
+  for (const g of items) {
+    const i = gamesData.games.findIndex((x) => x.id === g.id);
+    if (i >= 0) {
+      const old = gamesData.games[i];
+      if (old.home.score !== g.home.score || old.away.score !== g.away.score) changed.push(g.id);
+      gamesData.games[i] = { ...g, books: g.books?.length ? g.books : old.books, best: g.books?.length ? g.best : old.best };
+    } else if ((league === "all" || g.league === league) && !$("#game-date").value) {
+      gamesData.games.push(g);
+    }
+  }
+  const order = { in: 0, pre: 1, post: 2 };
+  gamesData.games.sort((a, b) => (order[a.state] ?? 1) - (order[b.state] ?? 1) || (a.start || "").localeCompare(b.start || ""));
+  if ($("#sports").hidden) return;
+  renderGames();
+  for (const id of changed) document.querySelector(`.game[data-id="${CSS.escape(id)}"]`)?.classList.add("score-flash");
+}
+
 function renderGames() {
   const games = visibleGames();
   let html = games.map(gameCard).join("");
@@ -267,9 +316,7 @@ function renderGames() {
     html = Object.values(byLeague).map((lst) => `<h3 class="league-head">${lst[0].emoji} ${esc(lst[0].league_name)}</h3>${lst.map(gameCard).join("")}`).join("");
   }
   $("#games").innerHTML = html || `<div class="empty">No games match. Try another league or date.</div>`;
-  const note = $("#games-note");
-  note.hidden = gamesData.multi_book || !gamesData.games.length;
-  note.textContent = "Showing one sportsbook's line per game. Add a free ODDS_API_KEY in .env to compare DraftKings, FanDuel, BetMGM and more side by side.";
+  renderGamesNote();
 
   const ticks = gamesData.games.slice(0, 60).map((g) => {
     const o = g.odds || {};
@@ -692,6 +739,12 @@ function showMode() {
 }
 
 document.addEventListener("click", (e) => {
+  if (e.target.id === "odds-now") {
+    e.target.textContent = "Updating odds…";
+    api(`/sports/odds-now?league=${league}`, {}).then((d) => { gamesData = d; renderGames(); })
+      .catch((err) => { e.target.textContent = err.message; });
+    return;
+  }
   const tab = e.target.closest("[data-yt-tab]");
   if (tab) {
     ytTab = tab.dataset.ytTab;
@@ -773,7 +826,7 @@ showMode();
 
 // The server keeps live connections to Coinbase (crypto) and Alpaca (stocks)
 // and pushes each new price here.
-const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" }, finnhub: { status: "off" } };
+const streamInfo = { crypto: { status: "off" }, stocks: { status: "off" }, finnhub: { status: "off" }, sports: { status: "off" } };
 const lastPx = {};
 
 function applyLive(items) {
@@ -831,7 +884,11 @@ function showStreamStatus() {
   $("#sources-status").innerHTML = `<div class="source"><span>🪙 Crypto</span><span class="${cryptoLive ? "up" : "muted"}">${esc(cryptoText)}</span></div>
     <div class="source"><span>📈 Stocks (Alpaca)</span><span class="${k.status === "live" ? "up" : k.status === "error" ? "down" : "muted"}">${esc(stockText)}</span></div>
     <div class="source"><span>📈 More stocks (Finnhub)</span><span class="${f.status === "live" ? "up" : f.status === "error" ? "down" : "muted"}">${esc(finnText)}</span></div>
-    <div class="source"><span>🏈 Scores &amp; odds</span><span class="muted">ESPN${gamesData.multi_book ? " + The Odds API" : ""}, refreshed</span></div>`;
+    <div class="source"><span>🏈 Live scores</span><span class="${streamInfo.sports.status === "live" ? "up" : "muted"}">${
+      streamInfo.sports.status === "live" ? `⚡ ESPN, games in progress update every ${streamInfo.sports.every || 15}s` : "ESPN, refreshed"}</span></div>
+    <div class="source"><span>🎲 Odds</span><span class="muted">${(streamInfo.sports.odds || {}).configured
+      ? `The Odds API: many sportsbooks, live during games${(streamInfo.sports.odds || {}).remaining != null ? ` · ${streamInfo.sports.odds.remaining} credits left` : ""}`
+      : "ESPN (one sportsbook). Add an ODDS_API_KEY for many sportsbooks and live odds."}</span></div>`;
   const hasKeys = k.configured && k.status !== "error";
   $("#alpaca-form").hidden = hasKeys && !alpacaEditing;
   $("#alpaca-change").hidden = !hasKeys || alpacaEditing;
@@ -891,7 +948,12 @@ function startStream() {
   es.onmessage = (e) => {
     const d = JSON.parse(e.data);
     if (d.type === "prices") applyLive(d.items);
-    else if (d.type === "status") { streamInfo[d.stream] = d; showStreamStatus(); }
+    else if (d.type === "games") applyGames(d.items);
+    else if (d.type === "status") {
+      streamInfo[d.stream] = d;
+      showStreamStatus();
+      if (d.stream === "sports" && !$("#sports").hidden) renderGamesNote();
+    }
   };
 }
 
