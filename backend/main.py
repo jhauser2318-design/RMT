@@ -17,7 +17,7 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, fetch, finnhub, live_sports, markets, news, odds, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, betslip, fetch, finnhub, live_sports, markets, news, odds, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -325,6 +325,62 @@ def more_bets(league: str, event: str, group: str, force: bool = False):
         return odds.more_bets(league, sports.LEAGUES[league][2], event, group, force)
     except odds.OddsError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class SlipIn(BaseModel):
+    legs: list[dict]
+    stake: float = 0
+    kind: str = "parlay"
+
+
+def _slip(fn, *args):
+    try:
+        return fn(*args)
+    except betslip.BetError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/bets/quote")
+def bet_quote(body: SlipIn):
+    """What a pretend slip would pay, plus anything a real sportsbook would object to."""
+    notes = betslip.conflicts(body.legs)
+    if body.stake <= 0 or not body.legs or (body.kind == "parlay" and len(body.legs) < 2):
+        return {"quote": None, "notes": notes}
+    return {"quote": _slip(betslip.quote, body.legs, body.stake, body.kind), "notes": notes}
+
+
+@app.get("/api/bets")
+def bets_list():
+    return betslip.all_bets()
+
+
+@app.post("/api/bets")
+def bets_place(body: SlipIn):
+    if body.kind not in ("parlay", "singles"):
+        raise HTTPException(status_code=400, detail="Pick Parlay or Singles.")
+    _slip(betslip.place, body.legs, body.stake, body.kind)
+    return betslip.all_bets(settle=False)
+
+
+class MarkIn(BaseModel):
+    leg: int
+    result: str
+
+
+@app.post("/api/bets/{bet_id}/mark")
+def bets_mark(bet_id: str, body: MarkIn):
+    return _slip(betslip.mark, bet_id, body.leg, body.result)
+
+
+class ResetIn(BaseModel):
+    start: float = betslip.START_BANKROLL
+
+
+@app.post("/api/bets/reset")
+def bets_reset(body: ResetIn):
+    if not 1 <= body.start <= 10_000_000:
+        raise HTTPException(status_code=400, detail="Pick a starting balance between $1 and $10,000,000.")
+    return betslip.reset(body.start)
 
 
 @app.post("/api/sports/odds-now")
