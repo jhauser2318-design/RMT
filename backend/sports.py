@@ -175,13 +175,14 @@ def _epoch(iso: str | None) -> float:
         return 0.0
 
 
-def games(league: str = "all", date: str = "", force_odds: bool = False) -> dict:
+def games(league: str = "all", date: str = "", force_odds: bool = False, spend_odds: bool = True) -> dict:
     """Games for one league (or every league), soonest and live first."""
     ids = list(LEAGUES) if league == "all" else [league] if league in LEAGUES else []
     if demo_mode():
         return {"live": False, "games": demo.games(ids), "multi_book": False}
     # "All sports" never spends odds credits: it shows what each league last fetched.
-    viewing = league != "all"
+    # spend_odds=False (the AI chat) does the same for one league.
+    viewing = league != "all" and spend_odds
     with ThreadPoolExecutor(max_workers=12) as pool:
         lists = list(pool.map(lambda l: _league_games(l, date, odds_viewing=viewing, odds_force=force_odds), ids))
     out = [g for lst in lists for g in lst]
