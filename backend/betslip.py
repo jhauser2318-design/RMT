@@ -70,6 +70,15 @@ def quote(legs: list[dict], stake: float, kind: str = "parlay") -> dict:
             "to_win": round(sum(payouts) - stake * len(legs), 2), "each": [round(p - stake, 2) for p in payouts]}
 
 
+def one_book(legs: list[dict]) -> str | None:
+    """A parlay has to be at one sportsbook (you can't combine DraftKings and FanDuel picks)."""
+    books = {leg.get("book") or "" for leg in legs}
+    if len(books) > 1:
+        names = ", ".join(sorted(b for b in books if b)) or "different books"
+        return f"A parlay has to be at one sportsbook, but these picks are from {names}. Pick one book on the slip."
+    return None
+
+
 def conflicts(legs: list[dict]) -> list[str]:
     """Problems a real sportsbook would refuse or price differently."""
     notes = []
@@ -126,6 +135,9 @@ def place(legs: list[dict], stake: float, kind: str) -> list[dict]:
         bad = [n for n in conflicts(clean) if n.startswith("Both sides")]
         if bad:
             raise BetError(bad[0])
+        mixed = one_book(clean)
+        if mixed:
+            raise BetError(mixed)
     with _lock:
         data = _load()
         balance = summary(data)["balance"]

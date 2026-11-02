@@ -226,8 +226,10 @@ function mainPicks(g) {
   const out = {};
   for (const side of ["away", "home"]) {
     const price = best[`${side}_ml`]?.price ?? o[`${side}_ml`];
+    const mlPrices = Object.fromEntries(books.filter((r) => r[`${side}_ml`] != null).map((r) => [r.book, r[`${side}_ml`]]));
     if (price != null) out[`ml_${side}`] = { ...base, market: "ml", side, price, point: null,
-      book: best[`${side}_ml`]?.book || o.provider || "", label: `${name(side)} moneyline` };
+      book: best[`${side}_ml`]?.book || o.provider || "", label: `${name(side)} moneyline`,
+      prices: Object.keys(mlPrices).length ? mlPrices : { [o.provider || ""]: price } };
     const sb = best[`${side}_spread_price`];
     const row = sb && books.find((r) => r[`${side}_spread_price`] === sb.price && r[`${side}_spread`] != null);
     let point = row ? row[`${side}_spread`] : null, sp = sb?.price ?? null, book = sb?.book || "";
@@ -239,16 +241,22 @@ function mainPicks(g) {
         if (favSide) { point = side === favSide ? n : -n; sp = -110; book = o.provider || ""; }
       }
     }
+    // Only books with this exact line count: a book at -3 isn't the same bet as one at -2.5.
+    const spPrices = Object.fromEntries(books.filter((r) => r[`${side}_spread`] === point && r[`${side}_spread_price`] != null)
+      .map((r) => [r.book, r[`${side}_spread_price`]]));
     if (point != null && sp != null) out[`spread_${side}`] = { ...base, market: "spread", side, price: sp, point,
-      book, label: `${name(side)} ${pt(point)}`, line_key: "spread" };
+      book, label: `${name(side)} ${pt(point)}`, line_key: "spread", prices: Object.keys(spPrices).length ? spPrices : { [book]: sp } };
   }
   for (const side of ["over", "under"]) {
     const tb = best[`${side}_price`];
     const row = tb && books.find((r) => r[`${side}_price`] === tb.price && r.total != null);
     const point = row ? row.total : o.total;
     const price = tb?.price ?? (o.total != null ? -110 : null);
+    const tBook = tb?.book || o.provider || "";
+    const tPrices = Object.fromEntries(books.filter((r) => r.total === point && r[`${side}_price`] != null).map((r) => [r.book, r[`${side}_price`]]));
     if (point != null && price != null) out[`total_${side}`] = { ...base, market: "total", side, price, point,
-      book: tb?.book || o.provider || "", label: `${side === "over" ? "Over" : "Under"} ${point}`, line_key: "total" };
+      book: tBook, label: `${side === "over" ? "Over" : "Under"} ${point}`, line_key: "total",
+      prices: Object.keys(tPrices).length ? tPrices : { [tBook]: price } };
   }
   return out;
 }
@@ -266,7 +274,8 @@ function booksTable(g) {
   const cell = (row, k, extra = "") => {
     const side = k.startsWith("home") ? "home" : "away";
     const pick = row[k] != null && g.state !== "post" ? { ...gameBase(g), market: "ml", side, price: row[k], point: null, book: row.book,
-      label: `${g[side].abbr || g[side].short} moneyline` } : null;
+      label: `${g[side].abbr || g[side].short} moneyline`,
+      prices: Object.fromEntries(g.books.filter((r) => r[`${side}_ml`] != null).map((r) => [r.book, r[`${side}_ml`]])) } : null;
     return `<td class="${b[k] && b[k].price === row[k] ? "best" : ""}">${pick ? `<button class="cell-pick" ${pickAttr(pick)}>${extra}${oddsFmt(row[k])}</button>` : `${extra}${oddsFmt(row[k])}`}</td>`;
   };
   const home = esc(g.home.abbr || "Home"), away = esc(g.away.abbr || "Away");
@@ -476,6 +485,32 @@ function openSlip(tab = "slip") {
   renderSlip();
 }
 
+// A parlay is one bet at one sportsbook, so every pick must be priced at the same book.
+const decOf = (a) => (a > 0 ? 1 + a / 100 : 1 + 100 / -a);
+const amOf = (d) => (d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1)));
+function legPrices(l) {
+  const p = Object.fromEntries(Object.entries(l.prices || {}).filter(([, v]) => v != null));
+  return Object.keys(p).length ? p : { [l.book || ""]: l.price };
+}
+// Books that offer every pick, best parlay payout first.
+function parlayBooks(legs) {
+  let common = null;
+  for (const l of legs) {
+    const ks = Object.keys(legPrices(l));
+    common = common ? common.filter((k) => ks.includes(k)) : ks;
+  }
+  return (common || []).map((book) => ({ book, dec: legs.reduce((d, l) => d * decOf(legPrices(l)[book]), 1) }))
+    .sort((a, b) => b.dec - a.dec);
+}
+// The legs as they'd be bet: in a parlay, all repriced at the chosen book.
+function slipLegs(kind) {
+  if (kind !== "parlay") return slip.legs;
+  const opts = parlayBooks(slip.legs);
+  const book = opts.find((o) => o.book === slip.book)?.book ?? opts[0]?.book;
+  if (book == null) return null;
+  return slip.legs.map((l) => ({ ...l, book, price: legPrices(l)[book] }));
+}
+
 let quoteTimer = null;
 function renderSlip(msg = "") {
   $$("[data-slip-tab]").forEach((c) => c.classList.toggle("active", c.dataset.slipTab === slip.tab));
@@ -486,9 +521,17 @@ function renderSlip(msg = "") {
     return;
   }
   const kind = legs.length < 2 ? "singles" : slip.kind;
+  const books = kind === "parlay" ? parlayBooks(legs) : [];
+  const shown = kind === "parlay" ? (slipLegs("parlay") || legs) : legs;
+  const chosen = shown[0]?.book;
+  const bookPicker = kind !== "parlay" ? "" : !books.length
+    ? `<p class="small down">⚠️ No single sportsbook offers all of these picks, so they can't be one parlay. Remove a pick, or switch to Singles.</p>`
+    : `<div class="slip-books"><span class="small muted">Parlay at</span><div class="chips">${books.map((b) =>
+        `<button class="chip ${b.book === chosen ? "active" : ""}" data-slip-book="${esc(b.book)}">${esc(b.book || "This book")} <small>${oddsFmt(amOf(b.dec))}</small></button>`).join("")}</div>
+       ${books.length > 1 ? `<span class="small muted">Best payout: ${esc(books[0].book)}. Only books offering every pick are shown.</span>` : ""}</div>`;
   $("#slip-body").innerHTML = `
     ${msg ? `<p class="small down">${esc(msg)}</p>` : ""}
-    <ul class="slip-legs">${legs.map((l, i) => `<li>
+    <ul class="slip-legs">${shown.map((l, i) => `<li>
       <div><b>${esc(l.label)}</b><small>${esc(l.game)}${l.book ? ` · ${esc(l.book)}` : ""}</small></div>
       <span class="slip-odds">${oddsFmt(l.price)}</span>
       <button class="icon-btn" data-slip-remove="${i}" title="Remove">✕</button></li>`).join("")}</ul>
@@ -496,11 +539,12 @@ function renderSlip(msg = "") {
     ${legs.length >= 2 ? `<div class="chips slip-kind">
       <button class="chip ${kind === "parlay" ? "active" : ""}" data-slip-kind="parlay">Parlay (${legs.length} picks)</button>
       <button class="chip ${kind === "singles" ? "active" : ""}" data-slip-kind="singles">Singles</button></div>` : ""}
+    ${bookPicker}
     <label class="slip-stake">${kind === "singles" && legs.length > 1 ? "Stake per pick" : "Stake"}
       <span>$<input id="slip-stake" type="number" min="1" step="1" value="${esc(slip.stake)}"></span></label>
     <div class="chips">${[5, 10, 25, 50, 100].map((v) => `<button class="chip" data-stake="${v}">$${v}</button>`).join("")}</div>
     <div id="slip-quote" class="slip-quote"></div>
-    <button id="slip-place" class="btn-glow wide">Place pretend bet</button>
+    <button id="slip-place" class="btn-glow wide" ${kind === "parlay" && !books.length ? "disabled" : ""}>Place pretend bet</button>
     <button class="link-btn" data-slip-clear>Clear slip</button>`;
   $("#slip-stake").addEventListener("input", () => { slip.stake = Number($("#slip-stake").value) || 0; saveSlip(); requestQuote(); });
   requestQuote();
@@ -510,8 +554,10 @@ function requestQuote() {
   clearTimeout(quoteTimer);
   quoteTimer = setTimeout(async () => {
     const kind = slip.legs.length < 2 ? "singles" : slip.kind;
+    const legs = slipLegs(kind);
+    if (!legs) { $("#slip-quote").innerHTML = ""; $("#slip-notes").innerHTML = ""; return; }
     try {
-      const r = await api("/bets/quote", { legs: slip.legs, stake: slip.stake, kind });
+      const r = await api("/bets/quote", { legs, stake: slip.stake, kind });
       $("#slip-notes").innerHTML = r.notes.map((n) => `<p class="small ${n.startsWith("Both") ? "down" : "muted"}">⚠️ ${esc(n)}</p>`).join("");
       const q = r.quote;
       $("#slip-quote").innerHTML = !q ? "" : q.kind === "parlay"
@@ -528,9 +574,11 @@ function requestQuote() {
 
 async function placeSlip() {
   const kind = slip.legs.length < 2 ? "singles" : slip.kind;
+  const legs = slipLegs(kind);
+  if (!legs) return;
   $("#slip-place").disabled = true;
   try {
-    slip.mine = await api("/bets", { legs: slip.legs, stake: slip.stake, kind });
+    slip.mine = await api("/bets", { legs, stake: slip.stake, kind });
     slip.legs = [];
     saveSlip();
     $$("[data-pick][aria-pressed]").forEach((el) => el.removeAttribute("aria-pressed"));
@@ -567,13 +615,14 @@ async function renderMine() {
 }
 
 document.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-pick],[data-slip-tab],[data-slip-remove],[data-slip-kind],[data-stake],[data-slip-clear],[data-mark],[data-slip-reset],#slip-place");
+  const t = e.target.closest("[data-pick],[data-slip-tab],[data-slip-remove],[data-slip-kind],[data-slip-book],[data-stake],[data-slip-clear],[data-mark],[data-slip-reset],#slip-place");
   if (!t) return;
   const d = t.dataset;
   if (d.pick) togglePick(d.pick);
   else if (d.slipTab) { slip.tab = d.slipTab; renderSlip(); }
   else if (d.slipRemove != null) { slip.legs.splice(Number(d.slipRemove), 1); saveSlip(); renderSlip(); if (!$("#sports").hidden) renderGames(); }
   else if (d.slipKind) { slip.kind = d.slipKind; saveSlip(); renderSlip(); }
+  else if (d.slipBook != null) { slip.book = d.slipBook; renderSlip(); }
   else if (d.stake) { slip.stake = Number(d.stake); saveSlip(); renderSlip(); }
   else if (d.slipClear != null) { slip.legs = []; saveSlip(); renderSlip(); if (!$("#sports").hidden) renderGames(); }
   else if (t.id === "slip-place") placeSlip();
@@ -627,6 +676,7 @@ async function loadMore(group, force = false) {
       <table class="books"><thead><tr><th>${m.rows.some((x) => x.player) ? "Player" : "Pick"}</th><th></th><th>Best</th><th>Book</th></tr></thead><tbody>
       ${m.rows.map((x) => `<tr class="pick-row" ${g.state === "post" ? "" : pickAttr({ ...gameBase(g), market: m.key, side: x.side, player: x.player, point: x.point,
         price: x.best.price, book: x.best.book, line_key: `${m.key}|${x.point ?? ""}`,
+        prices: Object.fromEntries(x.books.filter((b) => b.price != null).map((b) => [b.book, b.price])),
         label: `${x.player ? `${x.player} ` : ""}${x.side}${x.point != null ? ` ${x.point}` : ""} · ${m.label}` })} title="Tap to add to your bet slip · ${esc(x.books.map((b) => `${b.book} ${oddsFmt(b.price)}`).join(" · "))}">
         <td>${esc(x.player || x.side)}</td>
         <td>${x.player ? esc(x.side) : ""}${x.point != null ? ` ${esc(x.player || /total/i.test(m.key) ? x.point : pt(x.point))}` : ""}</td>

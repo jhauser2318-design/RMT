@@ -411,3 +411,6 @@ tr.pick-row[aria-pressed] td { color: var(--lime); }
 .my-bet li { display: flex; justify-content: space-between; gap: 8px; }
 .my-bet .mark { white-space: nowrap; }
 .my-bet .mark .link-btn { margin-left: 6px; }
+
+.slip-books { display: flex; flex-direction: column; gap: 6px; }
+.slip-books .chip small { color: var(--lime); margin-left: 4px; }
