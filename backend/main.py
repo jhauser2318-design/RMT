@@ -343,6 +343,11 @@ def _yt_page(title: str, text: str, ok: bool = False) -> str:
 @app.get("/api/youtube/callback")
 def youtube_callback(code: str = "", state: str = "", error: str = ""):
     """Google sends you back here after you sign in."""
+    if error == "access_denied":
+        return HTMLResponse(_yt_page("Google blocked the sign-in",
+                                     "Your Google project is in Testing mode. In Google Cloud → Google Auth Platform → Audience, "
+                                     "click Publish app (or add your Gmail under Test users), then sign in again. "
+                                     "If you clicked Cancel on Google's page, just sign in again."), status_code=400)
     if error:
         return HTMLResponse(_yt_page("Sign-in cancelled", "Google said: " + error), status_code=400)
     try:
