@@ -161,6 +161,9 @@ async function loadVideos(q = tickerFilter) {
     · <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${q} stock`)}" target="_blank" rel="noopener">search on YouTube ↗</a>`;
   try {
     const data = await api(`/markets/videos?q=${encodeURIComponent(q)}&tab=${ytTab}`);
+    $("#yt-subs-tab").hidden = !data.signed_in;
+    $("#yt-note").hidden = !data.note;
+    $("#yt-note").textContent = data.note ? `ℹ️ ${data.note}` : "";
     box.innerHTML = videosHTML(data.items, data.searchable);
   } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
@@ -1319,6 +1322,73 @@ function startStream() {
   };
 }
 
+/* ===================== YOUTUBE ACCOUNT ===================== */
+
+async function showYouTubeAccount() {
+  let st;
+  try { st = await api("/youtube/status"); } catch { return; }
+  const box = $("#yt-account");
+  $("#yt-client-form").hidden = st.configured && !ytEditing;
+  $("#yt-setup").hidden = st.configured && !ytEditing;
+  if (st.signed_in) {
+    box.innerHTML = `<div class="source"><span class="up">✅ Signed in${st.name ? ` as ${esc(st.name)}` : ""}</span>
+      <span class="muted">YouTube uses the official API: reliable, plus ⭐ My subscriptions.${st.error ? ` Last problem: ${esc(st.error)}` : ""}</span></div>
+      <div><button class="link-btn" data-yt-signout>Sign out</button> · <button class="link-btn" data-yt-edit>Change Google client</button></div>`;
+  } else if (st.configured) {
+    box.innerHTML = `<button class="btn-glow" data-yt-signin>Sign in with Google</button>
+      <span class="small muted">Opens Google in a new window. RMT only asks to read your YouTube (subscriptions, videos).</span>
+      <button class="link-btn" data-yt-edit>Change Google client</button>`;
+  } else {
+    box.innerHTML = `<span class="small muted">Sign in to see your subscriptions and to make YouTube reliable (its free feeds fail on and off). Follow the setup below once.</span>`;
+  }
+  $("#yt-subs-tab").hidden = !st.signed_in;
+}
+
+let ytEditing = false;
+$("#yt-client-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#yt-client-msg");
+  msg.className = "small muted";
+  msg.textContent = "Saving…";
+  try {
+    await api("/youtube/client", { client_id: $("#yt-client-id").value, client_secret: $("#yt-client-secret").value });
+    $("#yt-client-secret").value = "";
+    msg.className = "small up";
+    msg.textContent = "✅ Saved. Now click Sign in with Google.";
+    ytEditing = false;
+    showYouTubeAccount();
+  } catch (err) { msg.className = "small down"; msg.textContent = err.message; }
+});
+
+function afterYouTubeSignIn() {
+  fetch("/api/refresh", { method: "POST", headers: { "X-RMT": "1" } }).catch(() => {});
+  showYouTubeAccount();
+  if (marketsLoaded) loadVideos($("#yt-q").value.trim());
+}
+window.addEventListener("message", (e) => { if (e.data === "rmt-youtube") afterYouTubeSignIn(); });
+
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-yt-signin],[data-yt-signout],[data-yt-edit]");
+  if (!t) return;
+  if (t.dataset.ytSignin != null) {
+    window.open("/api/youtube/login", "rmt-youtube", "width=520,height=720");
+    // In case the sign-in window can't message back: check for a couple of minutes.
+    let n = 0;
+    const timer = setInterval(async () => {
+      n += 1;
+      try { if ((await api("/youtube/status")).signed_in) { clearInterval(timer); afterYouTubeSignIn(); } } catch { /* keep trying */ }
+      if (n > 60) clearInterval(timer);
+    }, 2000);
+  } else if (t.dataset.ytSignout != null) {
+    await api("/youtube/signout", {});
+    if (ytTab === "subs") { ytTab = "popular"; store.set("ytTab", ytTab); }
+    afterYouTubeSignIn();
+  } else {
+    ytEditing = true;
+    showYouTubeAccount();
+  }
+});
+
 /* ===================== REFRESH & UPDATES ===================== */
 
 function stamp() {
@@ -1403,7 +1473,7 @@ $("#auto-refresh").addEventListener("change", () => setAutoRefresh(Number($("#au
 setAutoRefresh(Number($("#auto-refresh").value));
 $("#settings-open").addEventListener("click", () => {
   $("#settings").hidden = !$("#settings").hidden;
-  if (!$("#settings").hidden) { showVersion(); checkUpdate(); showKeyForms(); }
+  if (!$("#settings").hidden) { showVersion(); checkUpdate(); showKeyForms(); showYouTubeAccount(); }
 });
 $("#update-check").addEventListener("click", () => checkUpdate());
 api("/app/auto-update").then((r) => { $("#auto-update").checked = r.on; }).catch(() => {});
