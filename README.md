@@ -15,6 +15,7 @@ It runs on your own computer and opens in your web browser, the same way Life Co
 - **Headlines** from CNBC, MarketWatch, Yahoo Finance, Seeking Alpha, Investing.com, Nasdaq and Benzinga. Click any ticker on a ribbon, or type one, to see news about just that stock.
 - **Trading Talk**: the hottest posts on r/wallstreetbets, r/stocks, r/investing, r/options, r/Daytrading and r/StockMarket.
 - **YouTube**: **🔥 Popular** shows the most-watched stock and investing advice videos of the week from popular channels (Graham Stephan, Andrei Jikh, Humphrey Yang, Minority Mindset, Financial Education, Ticker Symbol: YOU, Meet Kevin, Warrior Trading, Humbled Trader), with view counts. Tabs for 📈 Investing, ⚡ Day trading and 📰 Market news (CNBC, Bloomberg, Yahoo Finance, WSJ). With an optional key, Popular also includes the most-viewed advice from all of YouTube.
+- **Your YouTube account** (optional): **⚙ → YouTube → Sign in with Google** adds a **⭐ My subscriptions** tab and makes YouTube reliable: YouTube's free channel feeds have been failing on and off since late 2025, so signed in, RMT uses the official YouTube API instead. Without signing in, RMT shows the last videos that loaded and says why. One-time setup (~10 minutes in Google Cloud) is spelled out step by step in ⚙.
 
 ### 🎲 Betting
 - **Every game** in the NFL, college football, NBA, college basketball, MLB, NHL and UFC, with live scores.

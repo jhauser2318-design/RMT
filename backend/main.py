@@ -10,14 +10,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-from . import ai, alpaca, betslip, fetch, finnhub, live_sports, markets, news, odds, settings, sports, stock, stream  # noqa: E402 (after .env is loaded)
+from . import ai, alpaca, betslip, fetch, finnhub, live_sports, markets, news, odds, settings, sports, stock, stream, youtube  # noqa: E402 (after .env is loaded)
 
 sys.path.insert(0, str(ROOT))
 import updater  # noqa: E402
@@ -296,9 +296,74 @@ def get_talk(sort: str = "hot"):
     return news.trading_talk(sort)
 
 
+@app.get("/api/youtube/status")
+def youtube_status():
+    return youtube.status()
+
+
+class YouTubeClientIn(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+@app.post("/api/youtube/client")
+def youtube_client(body: YouTubeClientIn):
+    """Save the Google OAuth client (Desktop app) RMT signs in with."""
+    cid, secret = body.client_id.strip(), body.client_secret.strip()
+    if not cid.endswith(".apps.googleusercontent.com"):
+        raise HTTPException(status_code=400, detail="The client ID should end with .apps.googleusercontent.com. Copy it again from Google Cloud.")
+    if len(secret) < 10:
+        raise HTTPException(status_code=400, detail="That client secret looks too short. Copy it again from Google Cloud.")
+    try:
+        settings.save({"YOUTUBE_CLIENT_ID": cid, "YOUTUBE_CLIENT_SECRET": secret})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return youtube.status()
+
+
+@app.get("/api/youtube/login")
+def youtube_login():
+    """Opens Google's sign-in page (a GET from a new window, so no X-RMT header)."""
+    try:
+        return RedirectResponse(youtube.login_url())
+    except youtube.YouTubeError as e:
+        return HTMLResponse(_yt_page("Can't sign in yet", str(e)), status_code=400)
+
+
+def _yt_page(title: str, text: str, ok: bool = False) -> str:
+    import html as _h
+    return f"""<!doctype html><meta charset="utf-8"><title>RMT · YouTube</title>
+<body style="background:#050b08;color:#e6f5ec;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0">
+<div style="text-align:center;max-width:460px"><h2 style="color:{'#22e06b' if ok else '#ff4d6a'}">{_h.escape(title)}</h2>
+<p>{_h.escape(text)}</p><p style="color:#8db39c">You can close this window.</p></div>
+<script>try {{ window.opener && window.opener.postMessage("rmt-youtube", "*"); }} catch (e) {{}}
+{'setTimeout(() => window.close(), 2500);' if ok else ''}</script></body>"""
+
+
+@app.get("/api/youtube/callback")
+def youtube_callback(code: str = "", state: str = "", error: str = ""):
+    """Google sends you back here after you sign in."""
+    if error:
+        return HTMLResponse(_yt_page("Sign-in cancelled", "Google said: " + error), status_code=400)
+    try:
+        name = youtube.finish_login(code, state)
+    except youtube.YouTubeError as e:
+        return HTMLResponse(_yt_page("Couldn't sign in", str(e)), status_code=400)
+    fetch.forget("ytapi:")
+    return HTMLResponse(_yt_page("✅ YouTube connected", f"Signed in{' as ' + name if name else ''}. "
+                                 "Your subscriptions are in the YouTube panel now.", ok=True))
+
+
+@app.post("/api/youtube/signout")
+def youtube_signout():
+    youtube.sign_out()
+    fetch.forget("ytapi:")
+    return youtube.status()
+
+
 @app.get("/api/markets/videos")
 def get_videos(q: str = "", tab: str = "popular"):
-    return news.youtube(q, tab)
+    return news.youtube_videos(q, tab)
 
 
 @app.get("/api/sports/leagues")

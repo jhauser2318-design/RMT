@@ -20,3 +20,4 @@ jobs:
       - run: python tests/test_finnhub.py
       - run: python tests/test_live_sports.py
       - run: python tests/test_betslip.py
+      - run: python tests/test_youtube.py

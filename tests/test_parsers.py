@@ -87,8 +87,15 @@ def fake_get_json(url, params=None, timeout=10):
     raise OSError(f"offline: {url}")
 
 
+_TMP = Path(__import__("tempfile").mkdtemp())
+
+
 def reset():
     fetch._cache.clear()
+    news._last.clear()
+    news.LAST_FILE = _TMP / "youtube_last.json"  # never the real data folder
+    if news.LAST_FILE.exists():
+        news.LAST_FILE.unlink()
     odds._lines.clear()
     odds._viewed.clear()
     odds._budget.update(remaining=None, used=None, at=0.0)
@@ -188,12 +195,12 @@ def test_youtube_popular_advice_ranked_by_views():
     reset()
     news.get = lambda url, *a, **k: feed(url.split("channel_id=")[1])
     os.environ["YOUTUBE_API_KEY"] = ""
-    popular = news.youtube(tab="popular")
+    popular = news.youtube_videos(tab="popular")
     assert [v["video_id"] for v in popular["items"]] == ["g1", "r1"], popular  # last week only, most viewed first
     assert popular["items"][0]["views"] == 900000 and popular["items"][0]["image"].endswith("g1/mqdefault.jpg")
-    assert [v["video_id"] for v in news.youtube(tab="news")["items"]] == ["c1"]  # market news is its own tab
-    assert [v["video_id"] for v in news.youtube(tab="trading")["items"]] == ["r1"]
-    assert [v["video_id"] for v in news.youtube("momentum")["items"]] == ["r1"]  # a search looks in every tab
+    assert [v["video_id"] for v in news.youtube_videos(tab="news")["items"]] == ["c1"]  # market news is its own tab
+    assert [v["video_id"] for v in news.youtube_videos(tab="trading")["items"]] == ["r1"]
+    assert [v["video_id"] for v in news.youtube_videos("momentum")["items"]] == ["r1"]  # a search looks in every tab
 
 
 def test_falls_back_to_sample_data_when_offline():
@@ -203,7 +210,7 @@ def test_falls_back_to_sample_data_when_offline():
     assert not markets.quotes(["AAPL"])[1]
     g = sports.games("all")
     assert not g["live"] and g["games"] and all(x["odds"] for x in g["games"])
-    assert not news.headlines()["live"] and not news.trading_talk()["live"] and not news.youtube()["live"]
+    assert not news.headlines()["live"] and not news.trading_talk()["live"] and not news.youtube_videos()["live"]
     assert not sports.standings("nfl")["live"] and not sports.search("lebron")["live"]
 
 

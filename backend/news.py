@@ -6,13 +6,16 @@ site redesigns its pages. Sources that can't be reached are skipped.
 """
 import html
 import os
+import json
 import re
+import threading
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-from . import demo
-from .fetch import _when as fetch_when
+from pathlib import Path
+
+from . import demo, youtube
 from .fetch import cached, demo_mode, get, get_json, parse_feed
 
 NEWS_FEEDS = [
@@ -135,76 +138,147 @@ def trading_talk(sort: str = "hot") -> dict:
     return {"live": True, "items": items} if items else {"live": False, "items": demo.reddit()}
 
 
-def _yt_get(path: str, params: dict, key: str) -> dict:
-    return get_json(f"https://www.googleapis.com/youtube/v3/{path}", {**params, "key": key})
+# Last videos that loaded per channel, so a YouTube feed outage doesn't empty the panel.
+LAST_FILE = Path(__file__).resolve().parent.parent / "data" / "youtube_last.json"
+_last: dict[str, dict] = {}
+_last_lock = threading.Lock()
 
 
-def _yt_search(query: str, key: str, popular: bool = False) -> list[dict]:
-    params = {"part": "snippet", "q": query, "type": "video", "maxResults": 24, "relevanceLanguage": "en",
-              "order": "viewCount" if popular else "relevance"}
-    if popular:
-        since = time.gmtime(time.time() - POPULAR_DAYS * 86400)
-        params["publishedAfter"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", since)
-    data = _yt_get("search", params, key)
-    out = []
-    for it in data.get("items", []):
-        sn = it["snippet"]
-        vid = it["id"]["videoId"]
-        out.append({"title": _clean(sn["title"]), "link": f"https://www.youtube.com/watch?v={vid}",
-                    "video_id": vid, "source": sn["channelTitle"],
-                    "image": sn["thumbnails"].get("medium", {}).get("url", ""),
-                    "time": fetch_when(sn.get("publishedAt", "")), "views": None})
-    if out:  # view counts: one cheap extra request for all of them
-        stats = _yt_get("videos", {"part": "statistics", "id": ",".join(v["video_id"] for v in out)}, key)
-        views = {v["id"]: int(v.get("statistics", {}).get("viewCount", 0)) for v in stats.get("items", [])}
-        for v in out:
-            v["views"] = views.get(v["video_id"])
-    return out
+def _remember(cid: str, items: list[dict]) -> None:
+    with _last_lock:
+        if not _last and LAST_FILE.is_file():
+            try:
+                _last.update(json.loads(LAST_FILE.read_text(encoding="utf-8")))
+            except Exception:  # noqa: BLE001
+                pass
+        _last[cid] = {"at": time.time(), "items": items[:15]}
+        try:
+            LAST_FILE.parent.mkdir(exist_ok=True)
+            LAST_FILE.write_text(json.dumps(_last), encoding="utf-8")
+        except OSError:
+            pass
 
 
-def _channel_videos(tab: str) -> list[dict]:
+def _recall(cid: str) -> list[dict]:
+    with _last_lock:
+        if not _last and LAST_FILE.is_file():
+            try:
+                _last.update(json.loads(LAST_FILE.read_text(encoding="utf-8")))
+            except Exception:  # noqa: BLE001
+                pass
+        return list((_last.get(cid) or {}).get("items", []))
+
+
+def _yt_channel(name: str, cid: str) -> tuple[list[dict], bool]:
+    """(videos, came from the live feed?) for one channel."""
+    url = f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}"
+    try:
+        items = cached(f"feed:{url}", 300, lambda: parse_feed(get(url)))
+    except Exception:  # noqa: BLE001 (YouTube's feeds fail on and off)
+        return [], False
+    items = [{**i, "title": _clean(i["title"]), "summary": _clean(i["summary"])[:280], "source": i.get("source") or name}
+             for i in items if i["title"]]
+    if items:
+        _remember(cid, items)
+    return items, bool(items)
+
+
+def _channel_videos(tab: str) -> tuple[list[dict], dict]:
+    """Videos for a tab's channels, and how they were fetched: {"failed", "api", "stale"} counts."""
     if tab == "popular":
         channels = list(dict.fromkeys(YOUTUBE_CHANNELS["investing"] + YOUTUBE_CHANNELS["trading"]))
     else:
         channels = YOUTUBE_CHANNELS.get(tab, YOUTUBE_CHANNELS["investing"])
-    return _many([(n, f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}") for n, cid in channels])
-
-
-def youtube(query: str = "", tab: str = "popular") -> dict:
-    """Videos for a tab: "popular" (most-viewed advice this week), "investing", "trading" or "news".
-    A query filters them by title, or searches all of YouTube with a YOUTUBE_API_KEY."""
-    if demo_mode():
-        return {"live": False, "items": demo.videos(), "searchable": False}
-    key = os.getenv("YOUTUBE_API_KEY", "").strip()
-    tab = tab if tab in ("popular", "investing", "trading", "news") else "popular"
-    if query and key:
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda c: _yt_channel(*c), channels))
+    items = [i for lst, _ in results for i in lst]
+    failed = [cid for (name, cid), (_, ok) in zip(channels, results) if not ok]
+    how = {"failed": len(failed), "api": 0, "stale": 0}
+    if failed and youtube.available():  # the official API, when signed in (or with an API key)
         try:
-            items = cached(f"yt:{query.lower()}", 900, lambda: _yt_search(f"{query} stock", key))
-            return {"live": True, "items": items, "searchable": True}
-        except Exception:  # noqa: BLE001 (fall back to the channel feeds)
+            got = youtube.channel_videos(failed)
+            items += got
+            how["api"] = len({v["source"] for v in got})
+            for cid in failed:
+                _remember(cid, [v for v in got if v.get("channel_id") == cid] or _recall(cid))
+            failed = []
+        except youtube.YouTubeError:
             pass
-    if query:  # look in every tab's channels
-        items = [i for t in YOUTUBE_CHANNELS for i in _channel_videos(t)]
+    for cid in failed:  # still nothing: the last videos that did load
+        old = _recall(cid)
+        if old:
+            items += old
+            how["stale"] += 1
+    return list({i["link"]: i for i in items}.values()), how
+
+
+def _note(how: dict) -> str:
+    if not how.get("failed"):
+        return ""
+    if how.get("api"):
+        return ""
+    if how.get("stale"):
+        return ("YouTube's free channel feeds aren't answering right now (a known YouTube problem), so some videos "
+                "are from the last time they loaded. Sign in with Google under ⚙ → YouTube for a reliable connection.")
+    return ("YouTube's free channel feeds aren't answering right now (a known YouTube problem). "
+            "Sign in with Google under ⚙ → YouTube for a reliable connection.")
+
+
+def youtube_videos(query: str = "", tab: str = "popular") -> dict:
+    """Videos for a tab: "popular" (most-viewed advice this week), "investing", "trading", "news",
+    or "subs" (your subscriptions, when signed in). A query filters by title, or searches all
+    of YouTube through the API."""
+    if demo_mode():
+        return {"live": False, "items": demo.videos(), "searchable": False, "signed_in": False}
+    tab = tab if tab in ("popular", "investing", "trading", "news", "subs") else "popular"
+    base = {"searchable": youtube.available(), "signed_in": youtube.signed_in(), "note": ""}
+    if query and youtube.available():
+        try:
+            return {**base, "live": True, "items": youtube.search(f"{query} stock")}
+        except youtube.YouTubeError as e:
+            base["note"] = str(e)
+    if tab == "subs" and not query:
+        if not youtube.signed_in():
+            return {**base, "live": False, "items": [], "note": "Sign in with Google under ⚙ → YouTube to see your subscriptions."}
+        try:
+            subs = youtube.subscriptions()
+            items = youtube.channel_videos(subs[:60], per_channel=3)
+        except youtube.YouTubeError as e:
+            return {**base, "live": False, "items": [], "note": str(e)}
+        items.sort(key=lambda i: -i["time"])
+        return {**base, "live": True, "items": items[:48],
+                "note": "" if subs else "You're not subscribed to any channels on YouTube yet."}
+    if query:  # no API: look in every tab's channels
+        items, how = [], {"failed": 0}
+        for t in ("investing", "trading", "news"):
+            got, h = _channel_videos(t)
+            items += got
+            how["failed"] += h["failed"]
+            how["stale"] = how.get("stale", 0) + h["stale"]
         words = query.lower().split()
         items = [i for i in items if all(w in i["title"].lower() for w in words)]
         items = list({i["link"]: i for i in items}.values())
         items.sort(key=lambda i: -i["time"])
     elif tab == "popular":
+        items, how = _channel_videos("popular")
         week_ago = time.time() - POPULAR_DAYS * 86400
-        items = [i for i in _channel_videos("popular") if i["time"] >= week_ago and i.get("views")]
-        if key:
+        items = [i for i in items if i["time"] >= week_ago and i.get("views")]
+        if youtube.available():
             try:
-                items += cached("yt:popular", 3600, lambda: _yt_search(POPULAR_SEARCH, key, popular=True))
-            except Exception:  # noqa: BLE001 (the channel feeds still work)
+                items += youtube.search(POPULAR_SEARCH, popular_days=POPULAR_DAYS)
+            except youtube.YouTubeError:
                 pass
         items = list({i["link"]: i for i in items}.values())
         items.sort(key=lambda i: -(i.get("views") or 0))
     else:
-        items = _channel_videos(tab)
+        items, how = _channel_videos(tab)
+        items.sort(key=lambda i: -i["time"])
     items = items[:36]
     for i in items:
         if i.get("video_id") and not i.get("image"):
             i["image"] = f"https://i.ytimg.com/vi/{i['video_id']}/mqdefault.jpg"
+    note = base["note"] or _note(how)
     if not items and not query:
-        return {"live": False, "items": demo.videos(), "searchable": bool(key)}
-    return {"live": True, "items": items, "searchable": bool(key)}
+        return {**base, "live": False, "items": demo.videos(), "note": note or "No videos right now."}
+    return {**base, "live": True, "items": items, "note": note}
+
