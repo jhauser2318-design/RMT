@@ -344,6 +344,8 @@ def _slip(fn, *args):
 def bet_quote(body: SlipIn):
     """What a pretend slip would pay, plus anything a real sportsbook would object to."""
     notes = betslip.conflicts(body.legs)
+    if body.kind == "parlay" and len(body.legs) > 1 and betslip.one_book(body.legs):
+        notes.insert(0, betslip.one_book(body.legs))
     if body.stake <= 0 or not body.legs or (body.kind == "parlay" and len(body.legs) < 2):
         return {"quote": None, "notes": notes}
     return {"quote": _slip(betslip.quote, body.legs, body.stake, body.kind), "notes": notes}

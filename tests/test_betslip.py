@@ -16,9 +16,9 @@ from backend import betslip  # noqa: E402
 START = "2026-10-20T00:20Z"  # long over
 
 
-def leg(market, side, price, point=None, game="g1", **extra):
+def leg(market, side, price, point=None, game="g1", book="DraftKings", **extra):
     return {"game_id": game, "league": "nfl", "game": "BUF @ KC", "start": START, "market": market, "side": side,
-            "price": price, "point": point, "book": "DraftKings", "label": f"{side} {market}", **extra}
+            "price": price, "point": point, "book": book, "label": f"{side} {market}", **extra}
 
 
 def final(home, away, gid="g1", state="post"):
@@ -41,6 +41,31 @@ def test_odds_math():
             pass
         else:
             raise AssertionError(bad)
+
+
+def test_matches_standard_sportsbook_payouts():
+    def parlay(*prices, stake=100):
+        return betslip.quote([leg("ml", "home", p, game=f"g{i}") for i, p in enumerate(prices)], stake, "parlay")
+    assert parlay(-110, -110)["american"] == 264 and parlay(-110, -110)["payout"] == 364.46
+    assert parlay(-110, -110, -110)["american"] == 596
+    assert parlay(-110, -110, -110, -110)["american"] == 1228
+    assert parlay(100, 100)["payout"] == 400.0
+    assert parlay(-200, 150, stake=50)["payout"] == 187.5
+    assert betslip.quote([leg("ml", "home", -110)], 110, "singles")["to_win"] == 100.0
+
+
+def test_parlay_must_be_one_sportsbook():
+    fresh()
+    mixed = [leg("ml", "home", -110), leg("ml", "away", 150, game="g2", book="FanDuel")]
+    assert "one sportsbook" in betslip.one_book(mixed) and "DraftKings" in betslip.one_book(mixed)
+    try:
+        betslip.place(mixed, 10, "parlay")
+    except betslip.BetError as e:
+        assert "one sportsbook" in str(e)
+    else:
+        raise AssertionError("a parlay across sportsbooks must be refused")
+    assert len(betslip.place(mixed, 10, "singles")) == 2  # singles can each be at their own book
+    assert betslip.one_book([leg("ml", "home", -110), leg("ml", "away", 150, game="g2")]) is None
 
 
 def test_parlay_and_singles_quotes():
