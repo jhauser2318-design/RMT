@@ -81,7 +81,9 @@
         <ol>
           <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud → New project ↗</a>, name it <b>RMT</b>, click <b>Create</b>.</li>
           <li>Turn on the API: <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3 ↗</a> → <b>Enable</b>.</li>
-          <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform ↗</a> → <b>Get started</b>: app name <b>RMT</b>, your email, audience <b>External</b>, then <b>Create</b>.</li>
+          <li>Open <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform ↗</a> → <b>Get started</b>: app name <b>RMT</b>, your email, audience <b>External</b>, then <b>Create</b>.
+            Then on <b>Branding</b> fill in: home page <code>https://github.com/jhauser2318-design/RMT</code>, privacy policy
+            <code>https://github.com/jhauser2318-design/RMT/blob/main/PRIVACY.md</code>, authorized domain <code>github.com</code>, your email as developer contact → <b>Save</b>.</li>
           <li>Go to <b>Audience</b> → <b>Publish app</b> → <b>Confirm</b> so it says <b>In production</b>. You don't need Google to verify it. <i>If you skip this, sign-in fails with "Error 403: access_denied … can only be accessed by developer-approved testers": either publish it, or add your Gmail under <b>Audience → Test users</b> (then Google signs you out every 7 days).</i></li>
           <li>Go to <b>Clients</b> → <b>Create client</b> → type <b>Desktop app</b>, name <b>RMT</b> → <b>Create</b>. Copy the <b>Client ID</b> and <b>Client secret</b> into the boxes below.</li>
           <li>Click <b>Sign in with Google</b>. Google will warn that it "hasn't verified this app". That's your own RMT app, so click <b>Advanced → Go to RMT</b> → <b>Continue</b>.</li>
