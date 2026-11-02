@@ -254,6 +254,20 @@
     </section>
   </main>
 
+  <!-- ===================== PRETEND BET SLIP ===================== -->
+  <button id="slip-open" class="slip-fab" hidden>🎟️ Bet slip <span id="slip-count" class="slip-count">0</span></button>
+  <aside id="slip" class="chat slip" aria-label="Bet slip" hidden>
+    <header class="chat-head">
+      <div><strong>🎟️ Pretend bets</strong><small>Play money only. Nothing is really bet.</small></div>
+      <button id="slip-close" class="icon-btn" title="Close">✕</button>
+    </header>
+    <div class="chips slip-tabs">
+      <button class="chip" data-slip-tab="slip">Bet slip</button>
+      <button class="chip" data-slip-tab="mine">My bets</button>
+    </div>
+    <div id="slip-body" class="slip-body"></div>
+  </aside>
+
   <!-- ===================== MORE BETS (one game) ===================== -->
   <aside id="more" class="chat more" aria-label="More bets" hidden>
     <header class="chat-head">

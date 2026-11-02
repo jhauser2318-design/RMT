@@ -372,3 +372,42 @@ input:focus, select:focus, textarea:focus { border-color: var(--green); }
 .more-body { flex: 1; overflow-y: auto; padding: 6px 14px 14px; }
 .more-market h4 { margin: 14px 0 4px; color: var(--lime); font-size: 13.5px; }
 .more-market .books td:nth-child(2) { color: var(--muted); }
+
+/* ---------- pretend bet slip ---------- */
+button.ml { cursor: pointer; color: inherit; font: inherit; font-weight: 700; font-size: 13px; width: 100%; }
+button.ml:hover, .pill.pick:hover, .cell-pick:hover, tr.pick-row:hover { border-color: var(--green); }
+.pill.pick { cursor: pointer; color: var(--text); font-weight: 600; }
+.pill.pick small { color: var(--muted); margin-left: 3px; }
+.cell-pick { background: none; border: 1px solid transparent; border-radius: 6px; padding: 1px 4px; color: inherit; font: inherit; cursor: pointer; }
+tr.pick-row { cursor: pointer; }
+[data-pick][aria-pressed] { background: rgba(34, 224, 107, .22) !important; border-color: var(--lime) !important; color: var(--lime) !important; }
+tr.pick-row[aria-pressed] td { color: var(--lime); }
+.slip-fab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 35; border: 0; border-radius: 999px; padding: 12px 18px; cursor: pointer;
+  font-weight: 800; color: #03140a; background: linear-gradient(90deg, var(--lime), var(--green)); box-shadow: 0 8px 26px rgba(34, 224, 107, .4);
+}
+.slip-fab.bump { animation: bump .35s ease-out; }
+@keyframes bump { 50% { transform: scale(1.12); } }
+.slip-count { display: inline-block; min-width: 22px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #03140a; color: var(--lime); }
+.slip { z-index: 42; }
+.slip-tabs { padding: 10px 14px 0; }
+.slip-body { flex: 1; overflow-y: auto; padding: 10px 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.slip-legs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.slip-legs li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.slip-legs small, .my-bet small { display: block; color: var(--dim); }
+.slip-odds { font-weight: 800; color: var(--lime); font-variant-numeric: tabular-nums; }
+.slip-stake { display: flex; align-items: center; justify-content: space-between; font-weight: 700; }
+.slip-stake input { width: 110px; margin-left: 4px; text-align: right; font-weight: 700; }
+.slip-quote { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.slip-quote > div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
+.slip-quote span { color: var(--dim); font-size: 11.5px; }
+.slip-quote b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.my-bet { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--dim); border-radius: 10px; padding: 9px 11px; }
+.my-bet.won { border-left-color: var(--up); }
+.my-bet.lost { border-left-color: var(--down); }
+.my-bet.open { border-left-color: var(--gold); }
+.my-bet-top { display: flex; justify-content: space-between; }
+.my-bet ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.my-bet li { display: flex; justify-content: space-between; gap: 8px; }
+.my-bet .mark { white-space: nowrap; }
+.my-bet .mark .link-btn { margin-left: 6px; }
